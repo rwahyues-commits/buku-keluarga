@@ -225,6 +225,33 @@
   select#arisanTargetMonth, .filter-select{
     padding:8px 10px;border:1px solid var(--paper-line);border-radius:8px;font-size:12.5px;background:#fffefb;
   }
+
+  /* ---------- PEMILIK APLIKASI ---------- */
+  .created-by-ridho{
+    width:100%;
+    box-sizing:border-box;
+    text-align:right;
+    padding:6px 18px 18px;
+    font-family:Arial,sans-serif;
+    font-size:11px;
+    letter-spacing:1px;
+    color:#28374d;
+    opacity:.34;
+    user-select:none;
+    pointer-events:none;
+  }
+  .created-by-ridho strong{
+    font-weight:700;
+    color:#b8862f;
+  }
+  @media(max-width:600px){
+    .created-by-ridho{
+      padding-right:12px;
+      padding-bottom:14px;
+      font-size:10px;
+    }
+  }
+
 </style>
 </head>
 <body>
@@ -287,14 +314,19 @@
 
   // ---------- FORMAT NOMINAL ----------
   function formatNominal(value){
-    const digits=String(value??'').replace(/\D/g,'');
-    if(!digits)return '';
-    return Number(digits).toLocaleString('id-ID');
+    // Format tampilan saja. Jangan pernah menghasilkan "NaN".
+    let digits=String(value ?? '').replace(/\D/g,'');
+    digits=digits.replace(/^0+(?=\d)/,'');
+    if(!digits) return '';
+    // Pemisah ribuan Indonesia tanpa Number(), sehingga aman untuk nilai apa pun.
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
   }
 
   function parseNominal(value){
-    const digits=String(value??'').replace(/\D/g,'');
-    return Number(digits)||0;
+    const digits=String(value ?? '').replace(/\D/g,'');
+    if(!digits) return 0;
+    const n=Number(digits);
+    return Number.isFinite(n) ? n : 0;
   }
 
   function bindNominalInput(id){
@@ -302,18 +334,33 @@
     if(!input)return;
     input.type='text';
     input.inputMode='numeric';
+    input.autocomplete='off';
+
+    input.addEventListener('keydown',(e)=>{
+      // Izinkan tombol kontrol, navigasi, hapus, dan angka.
+      if(['Backspace','Delete','ArrowLeft','ArrowRight','Home','End','Tab'].includes(e.key)) return;
+      if(e.ctrlKey||e.metaKey) return;
+      if(!/^\d$/.test(e.key)) e.preventDefault();
+    });
+
     input.addEventListener('input',()=>{
-      const start=input.selectionStart;
+      const start=input.selectionStart ?? input.value.length;
       const before=String(input.value).slice(0,start);
       const digitCount=(before.match(/\d/g)||[]).length;
-      input.value=formatNominal(input.value);
+
+      const formatted=formatNominal(input.value);
+      input.value=formatted;
+
+      // Kursor tetap mengikuti posisi angka yang sedang diketik.
       let pos=0,count=0;
       while(pos<input.value.length && count<digitCount){
-        if(/\d/.test(input.value[pos]))count++;
+        if(/\d/.test(input.value[pos])) count++;
         pos++;
       }
       input.setSelectionRange(pos,pos);
     });
+
+    // Untuk edit data lama: format hanya jika memang ada angka.
     input.value=formatNominal(input.value);
   }
 
@@ -1153,5 +1200,6 @@
   })();
 
 </script>
+<div class="created-by-ridho">Created by <strong>Ridho</strong></div>
 </body>
 </html>
