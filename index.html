@@ -1160,7 +1160,7 @@
   // Anggota hanya membaca data. Polling ringan memastikan perubahan Admin
   // terlihat otomatis tanpa anggota harus refresh halaman.
   async function syncMemberData(){
-    if(isAdmin || !session?.user || isLoadingRemote) return;
+    if(isAdmin || isLoadingRemote) return;
     isLoadingRemote = true;
     try{
       const {data,error}=await supabaseClient
@@ -1199,7 +1199,8 @@
   function startMemberSync(){
     if(memberSyncTimer) clearInterval(memberSyncTimer);
     memberSyncTimer=null;
-    if(!isAdmin && session?.user){
+    if(!isAdmin){
+      // Mode Anggota dapat berjalan tanpa login; hanya SELECT yang diperlukan.
       memberSyncTimer=setInterval(syncMemberData,5000);
     }
   }
