@@ -4,18 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Buku Keluarga</title>
-
-  <meta name="theme-color" content="#28374d">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Buku Keluarga">
-  <meta name="description" content="Buku Keluarga — Kas, Tabungan, dan Arisan Keluarga dalam satu aplikasi.">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Buku Keluarga">
-  <meta property="og:description" content="Kelola kas, tabungan, dan arisan keluarga dengan mudah dan transparan.">
-  <meta property="og:site_name" content="Buku Keluarga">
-  <meta name="twitter:card" content="summary">
-
 <style>
   :root{
     --ink:#20281f;
@@ -194,11 +182,6 @@
 
   .loading{display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--muted);font-size:13px;}
   .shared-note{font-size:11.5px;color:var(--muted);text-align:center;margin:4px 0 14px;}
-  .auth-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:9px 12px;background:var(--card);border:1px solid var(--paper-line);border-radius:10px;font-size:12px;}
-  .auth-status{font-weight:700;color:var(--green);}
-  .auth-status.viewer{color:var(--muted);}
-  .auth-actions{display:flex;gap:6px;}
-  .hidden-edit{display:none!important;}
 
   .arisan-order{display:flex;overflow-x:auto;gap:10px;padding:4px 2px 10px;}
   .arisan-order .stop{
@@ -224,69 +207,16 @@
   select#arisanTargetMonth, .filter-select{
     padding:8px 10px;border:1px solid var(--paper-line);border-radius:8px;font-size:12.5px;background:#fffefb;
   }
-
-  .welcome-screen{
-    position:fixed;inset:0;z-index:100;
-    display:flex;align-items:center;justify-content:center;
-    padding:24px;
-    background:
-      radial-gradient(circle at 85% 15%, rgba(184,134,47,.22), transparent 28%),
-      linear-gradient(145deg,#28374d 0%,#20281f 100%);
-    color:#fdf8ec;
-  }
-  .welcome-card{
-    width:min(430px,100%);
-    text-align:center;
-    padding:34px 24px 26px;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:26px;
-    background:rgba(255,253,247,.08);
-    backdrop-filter:blur(14px);
-    box-shadow:0 20px 60px rgba(0,0,0,.28);
-  }
-  .welcome-mark{
-    width:74px;height:74px;margin:0 auto 16px;border-radius:20px;
-    display:flex;align-items:center;justify-content:center;
-    background:#b8862f;color:#28374d;
-    font:700 30px Georgia,serif;
-    box-shadow:0 8px 24px rgba(0,0,0,.2);
-  }
-  .welcome-card h2{font:700 31px Georgia,serif;margin:0 0 7px;}
-  .welcome-card p{margin:0;color:#dce2ea;line-height:1.55;font-size:14px;}
-  .welcome-features{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;}
-  .welcome-feature{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.1);font-size:11.5px;}
-  .welcome-enter{width:100%;margin-top:4px;padding:13px 16px;border:0;border-radius:12px;background:#b8862f;color:#2b1e08;font-weight:800;font-size:15px;}
-  .welcome-sub{margin-top:12px!important;font-size:11px!important;color:#bfc9d6!important;}
-  .wa-hint{display:none;margin-top:12px;padding:10px 12px;border-radius:10px;background:#eef1e6;color:#3c5a3e;font-size:11.5px;text-align:center;}
-  @media (display-mode: standalone){ .wa-hint{display:none!important;} }
-
 </style>
 </head>
 <body>
-
-
-<div class="welcome-screen" id="welcomeScreen">
-  <div class="welcome-card">
-    <div class="welcome-mark">BK</div>
-    <h2>Buku Keluarga</h2>
-    <p>Kas · Tabungan · Arisan</p>
-    <div class="welcome-features">
-      <span class="welcome-feature">💰 Keuangan</span>
-      <span class="welcome-feature">👨‍👩‍👧‍👦 Keluarga</span>
-      <span class="welcome-feature">📊 Transparan</span>
-    </div>
-    <p>Semua catatan keuangan keluarga dalam satu tempat.</p>
-    <button class="welcome-enter" id="enterApp">Buka Buku Keluarga</button>
-    <p class="welcome-sub">Dapat dibuka dari iPhone, Android, tablet, maupun komputer.</p>
-  </div>
-</div>
 
 <header>
   <div class="brand">
     <div class="mark">BK</div>
     <div>
       <h1>Buku Keluarga</h1>
-      <p class="tag">Kas · Tabungan · Arisan · Mode bersama</p>
+      <p class="tag">Kas · Tabungan · Arisan</p>
     </div>
   </div>
 </header>
@@ -311,9 +241,6 @@
 const STORAGE_KEY = 'buku-keluarga-data';
 let DATA = null;
 let currentTab = 'ringkasan';
-let IS_ADMIN = false;
-const ADMIN_PASSWORD = '123456'; // Ganti password admin di sini sebelum dibagikan.
-const AUTH_KEY = 'buku-keluarga-admin-session';
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function rupiah(n){
@@ -328,66 +255,6 @@ function fmtDate(d){
 }
 function initials(name){
   return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-}
-
-
-function isAdmin(){ return IS_ADMIN === true; }
-
-function showAuthBar(){
-  const main = document.getElementById('main');
-  if(!main) return;
-  const old = document.getElementById('authBar');
-  if(old) old.remove();
-  const bar = document.createElement('div');
-  bar.id = 'authBar';
-  bar.className = 'auth-bar';
-  bar.innerHTML = `
-    <span class="auth-status ${isAdmin()?'':'viewer'}">
-      ${isAdmin() ? '🔐 Admin aktif' : '👁️ Mode lihat saja'}
-    </span>
-    <span class="auth-actions">
-      ${isAdmin()
-        ? '<button class="btn ghost small" id="logoutAdmin">Keluar Admin</button>'
-        : '<button class="btn small" id="loginAdmin">Login Admin</button>'}
-    </span>`;
-  main.prepend(bar);
-  document.getElementById('loginAdmin')?.addEventListener('click', loginAdmin);
-  document.getElementById('logoutAdmin')?.addEventListener('click', logoutAdmin);
-}
-
-function loginAdmin(){
-  const password = prompt('Masukkan password admin:');
-  if(password === null) return;
-  if(password !== ADMIN_PASSWORD){
-    alert('Password admin salah.');
-    return;
-  }
-  IS_ADMIN = true;
-  try{ sessionStorage.setItem(AUTH_KEY, '1'); }catch(e){}
-  render();
-}
-
-function logoutAdmin(){
-  IS_ADMIN = false;
-  try{ sessionStorage.removeItem(AUTH_KEY); }catch(e){}
-  closeSheet();
-  render();
-}
-
-function requireAdmin(){
-  if(!isAdmin()){
-    alert('Akses ditolak. Hanya admin yang dapat mengubah data.');
-    return false;
-  }
-  return true;
-}
-
-function applyViewerMode(){
-  // Tombol tambah/edit/hapus disembunyikan untuk pengguna biasa.
-  document.getElementById('fab')?.classList.toggle('hidden-edit', !isAdmin());
-  document.querySelectorAll('[data-admin-only]').forEach(el=>{
-    el.classList.toggle('hidden-edit', !isAdmin());
-  });
 }
 
 function defaultData(){
@@ -457,8 +324,6 @@ function render(){
   else if(currentTab==='arisan') main.innerHTML = renderArisan();
   else if(currentTab==='anggota') main.innerHTML = renderAnggota();
   attachHandlers();
-  showAuthBar();
-  applyViewerMode();
 }
 
 function renderRingkasan(){
@@ -565,8 +430,8 @@ function renderArisan(){
         <div class="left"><span class="t">Iuran per giliran</span><span class="s">Per anggota, per putaran</span></div>
         <div class="amt in">${rupiah(a.contribution)}</div>
       </div>
-      <button data-admin-only class="btn ghost small" id="btnEditContribution" style="margin-top:8px;">Ubah Iuran</button>
-      <button data-admin-only class="btn ghost small" id="btnEditOrder" style="margin-top:8px;margin-left:8px;">Atur Urutan (${a.order.length} orang)</button>
+      <button class="btn ghost small" id="btnEditContribution" style="margin-top:8px;">Ubah Iuran</button>
+      <button class="btn ghost small" id="btnEditOrder" style="margin-top:8px;margin-left:8px;">Atur Urutan (${a.order.length} orang)</button>
     </div>
 
     ${a.order.length===0 ? `<div class="card"><div class="empty">Atur urutan giliran arisan terlebih dahulu.</div></div>` : `
@@ -582,7 +447,7 @@ function renderArisan(){
           </div>`;
         }).join('')}
       </div>
-      <button data-admin-only class="btn gold block" id="btnStartRound" style="margin-top:6px;">Mulai Putaran Baru</button>
+      <button class="btn gold block" id="btnStartRound" style="margin-top:6px;">Mulai Putaran Baru</button>
     </div>`}
 
     <div class="card">
@@ -611,11 +476,11 @@ function renderAnggota(){
         <div class="member-row">
           <div class="avatar">${initials(m.name)}</div>
           <div class="info"><div class="n">${escapeHtml(m.name)}</div><div class="b">Tabungan: ${rupiah(tabunganBalance(m.id))}</div></div>
-          <button data-admin-only class="btn danger small" data-del-member="${m.id}">Hapus</button>
+          <button class="btn danger small" data-del-member="${m.id}">Hapus</button>
         </div>`).join('') : '<div class="empty">Belum ada anggota.</div>'}
-      <button data-admin-only class="btn block gold" id="btnAddMember" style="margin-top:12px;">+ Tambah Anggota</button>
+      <button class="btn block gold" id="btnAddMember" style="margin-top:12px;">+ Tambah Anggota</button>
     </div>
-    <div class="shared-note">👁️ Data dapat dilihat bersama. Hanya admin yang dapat mengubahnya.</div>
+    <div class="shared-note">Data ini dibagikan ke semua orang yang membuka aplikasi ini.</div>
   `;
 }
 
@@ -634,8 +499,6 @@ function openSheet(html){
 function closeSheet(){ document.getElementById('sheetRoot').innerHTML=''; }
 
 function sheetAddKas(){
-  if(!requireAdmin()) return;
-
   openSheet(`
     <h3>Tambah Transaksi Kas</h3>
     <div class="seg" id="kasTypeSeg">
@@ -673,8 +536,6 @@ function sheetAddKas(){
 }
 
 function sheetAddTabungan(){
-  if(!requireAdmin()) return;
-
   if(DATA.members.length===0){ alert('Tambahkan anggota keluarga dulu di tab Anggota.'); return; }
   openSheet(`
     <h3>Tambah Setor / Tarik Tabungan</h3>
@@ -715,8 +576,6 @@ function sheetAddTabungan(){
 }
 
 function sheetAddMember(){
-  if(!requireAdmin()) return;
-
   openSheet(`
     <h3>Tambah Anggota Keluarga</h3>
     <div class="field"><label>Nama</label><input type="text" id="memberName" placeholder="mis. Ibu, Bapak, Kak Dinda"></div>
@@ -736,8 +595,6 @@ function sheetAddMember(){
 }
 
 function sheetEditContribution(){
-  if(!requireAdmin()) return;
-
   openSheet(`
     <h3>Ubah Iuran Arisan</h3>
     <div class="field"><label>Iuran per anggota per putaran (Rp)</label><input type="number" id="contribAmount" value="${DATA.arisan.contribution||''}" inputmode="numeric"></div>
@@ -756,8 +613,6 @@ function sheetEditContribution(){
 }
 
 function sheetEditOrder(){
-  if(!requireAdmin()) return;
-
   const selected = new Set(DATA.arisan.order);
   openSheet(`
     <h3>Atur Urutan Giliran</h3>
@@ -795,8 +650,6 @@ function sheetEditOrder(){
 }
 
 async function startNewRound(){
-  if(!requireAdmin()) return;
-
   const a = DATA.arisan;
   if(a.order.length===0){ alert('Atur urutan giliran dulu.'); return; }
   const doneIds = new Set(a.rounds.filter(r=>r.completed).map(r=>r.memberId));
@@ -811,8 +664,6 @@ async function startNewRound(){
 }
 
 function sheetOpenRound(roundId){
-  if(!requireAdmin()) return;
-
   const r = DATA.arisan.rounds.find(x=>x.id===roundId);
   if(!r) return;
   openSheet(`
@@ -854,7 +705,6 @@ function attachHandlers(){
   document.getElementById('btnStartRound')?.addEventListener('click', startNewRound);
   document.querySelectorAll('[data-del-member]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      if(!requireAdmin()) return;
       const id = btn.dataset.delMember;
       if(!confirm('Hapus anggota ini? Riwayat tabungan/arisan terkait tetap tersimpan.')) return;
       DATA.members = DATA.members.filter(m=>m.id!==id);
@@ -877,7 +727,6 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
 });
 
 document.getElementById('fab').addEventListener('click', ()=>{
-  if(!requireAdmin()) return;
   if(currentTab==='tabungan') sheetAddTabungan();
   else if(currentTab==='anggota') sheetAddMember();
   else sheetAddKas();
@@ -885,31 +734,9 @@ document.getElementById('fab').addEventListener('click', ()=>{
 
 // ================= INIT =================
 (async function init(){
-  try{ IS_ADMIN = sessionStorage.getItem(AUTH_KEY) === '1'; }catch(e){ IS_ADMIN = false; }
   await loadData();
   render();
 })();
-
-function closeWelcome(){
-  const screen = document.getElementById('welcomeScreen');
-  if(screen){
-    screen.style.opacity='0';
-    screen.style.transition='opacity .22s ease';
-    setTimeout(()=>screen.remove(),220);
-  }
-  try{ localStorage.setItem('buku-keluarga-welcome-seen','1'); }catch(e){}
-}
-
-document.getElementById('enterApp')?.addEventListener('click', closeWelcome);
-
-(function(){
-  try{
-    if(localStorage.getItem('buku-keluarga-welcome-seen') === '1'){
-      document.getElementById('welcomeScreen')?.remove();
-    }
-  }catch(e){}
-})();
-
 </script>
 </body>
 </html>
