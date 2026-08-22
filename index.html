@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Buku Keluarga</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
   :root{
     --ink:#20281f;
@@ -578,11 +581,18 @@
 
       if(error) throw error;
 
-      DATA = data?.data
+      // Jika row tidak terlihat oleh user (biasanya karena RLS), jangan diam-diam
+      // menganggap database kosong. Tampilkan error yang jelas supaya masalah policy
+      // Supabase tidak terlihat seperti data hilang.
+      if(!data){
+        throw new Error('Row app_data tidak terlihat. Pastikan policy SELECT mengizinkan role anon.');
+      }
+
+      DATA = data.data
         ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data)
         : defaultData();
 
-      lastDataUpdate = data?.updated_at || new Date().toISOString();
+      lastDataUpdate = data.updated_at || new Date().toISOString();
 
       if(!DATA || typeof DATA!=='object'){
         DATA=defaultData();
@@ -609,7 +619,7 @@
 
       showDataError(
         'Data belum dapat dimuat dari Supabase. '+
-        (err?.message || 'Periksa tabel app_data dan policy SELECT.')
+        (err?.message || 'Periksa tabel app_data dan policy SELECT untuk Anggota.')
       );
 
       return false;
@@ -1170,10 +1180,16 @@
         .maybeSingle();
 
       if(error) throw error;
-      const remoteStamp = data?.updated_at || null;
+      if(!data){
+        throw new Error('Row app_data tidak terlihat oleh Anggota. Periksa policy SELECT untuk anon.');
+      }
 
-      if(remoteStamp && remoteStamp !== lastDataUpdate){
-        DATA = data?.data
+      const remoteStamp = data.updated_at || null;
+
+      // Update apabila timestamp berubah. Jika timestamp kosong, tetap muat ulang
+      // supaya data anggota tidak tertahan pada state lama.
+      if(remoteStamp !== lastDataUpdate || !lastDataUpdate){
+        DATA = data.data
           ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data)
           : defaultData();
 
@@ -1196,12 +1212,39 @@
     }
   }
 
+  let realtimeChannel=null;
+
   function startMemberSync(){
     if(memberSyncTimer) clearInterval(memberSyncTimer);
     memberSyncTimer=null;
+
     if(!isAdmin){
-      // Mode Anggota dapat berjalan tanpa login; hanya SELECT yang diperlukan.
-      memberSyncTimer=setInterval(syncMemberData,5000);
+      // Muat segera, lalu polling setiap 3 detik sebagai fallback.
+      syncMemberData();
+      memberSyncTimer=setInterval(syncMemberData,3000);
+
+      // Saat HP kembali ke halaman, paksa ambil data terbaru.
+      window.addEventListener('focus',syncMemberData);
+      window.addEventListener('pageshow',syncMemberData);
+      document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='visible') syncMemberData();
+      });
+
+      // Realtime adalah jalur utama; polling tetap dipertahankan sebagai fallback.
+      try{
+        if(realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+        realtimeChannel=supabaseClient
+          .channel('buku-keluarga-app-data-sync')
+          .on('postgres_changes',{
+            event:'*',schema:'public',table:'app_data',filter:'id=eq.'+APP_DATA_ID
+          },()=>syncMemberData())
+          .subscribe((status)=>console.log('Realtime app_data:',status));
+      }catch(err){
+        console.warn('Realtime tidak tersedia, polling tetap berjalan:',err);
+      }
+    }else if(realtimeChannel){
+      supabaseClient.removeChannel(realtimeChannel);
+      realtimeChannel=null;
     }
   }
 
