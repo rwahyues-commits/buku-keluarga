@@ -219,6 +219,9 @@
       <p class="tag">Kas · Tabungan · Arisan</p>
     </div>
   </div>
+  <div id="authBox" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card);border:1px solid var(--paper-line);border-radius:12px;padding:10px 12px;">
+    <span style="color:var(--muted);font-size:13px;">Memeriksa akses…</span>
+  </div>
 </header>
 
 <main id="main">
@@ -237,506 +240,464 @@
 
 <div id="sheetRoot"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const STORAGE_KEY = 'buku-keluarga-data';
-let DATA = null;
-let currentTab = 'ringkasan';
+  // ================= SUPABASE =================
+  const SUPABASE_URL = 'https://ouhvoggkffpgywldjywk.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable__BvfW_8qaolHCuu9yJgtVQ_kLozf14v';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function rupiah(n){
-  n = Number(n)||0;
-  return 'Rp' + n.toLocaleString('id-ID');
-}
-function todayStr(){ return new Date().toISOString().slice(0,10); }
-function fmtDate(d){
-  try{
-    return new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
-  }catch(e){ return d; }
-}
-function initials(name){
-  return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-}
+  const APP_DATA_ID = 1;
+  let DATA = null;
+  let currentTab = 'ringkasan';
+  let session = null;
+  let isAdmin = false;
 
-function defaultData(){
-  return {
-    members: [],
-    kas: [],
-    tabungan: [],
-    arisan: { contribution: 0, order: [], rounds: [] }
-  };
-}
-
-async function loadData(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    DATA = res && res.value ? JSON.parse(res.value) : defaultData();
-  }catch(e){
-    DATA = defaultData();
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+  function rupiah(n){ n=Number(n)||0; return 'Rp'+n.toLocaleString('id-ID'); }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function fmtDate(d){
+    try{return new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}
+    catch(e){return d;}
   }
-  if(!DATA.arisan) DATA.arisan = { contribution:0, order:[], rounds:[] };
-}
-
-async function saveData(){
-  try{
-    const result = await window.storage.set(STORAGE_KEY, JSON.stringify(DATA), true);
-    if(!result){ console.error('Gagal menyimpan data'); }
-  }catch(e){ console.error('Storage error', e); }
-}
-
-function memberName(id){
-  const m = DATA.members.find(m=>m.id===id);
-  return m ? m.name : '—';
-}
-
-// ---------- KAS ----------
-function kasTotal(){
-  return DATA.kas.reduce((s,t)=> s + (t.type==='masuk'? t.amount : -t.amount), 0);
-}
-function kasMasukBulanIni(){
-  const ym = todayStr().slice(0,7);
-  return DATA.kas.filter(t=>t.type==='masuk' && t.date.slice(0,7)===ym).reduce((s,t)=>s+t.amount,0);
-}
-function kasKeluarBulanIni(){
-  const ym = todayStr().slice(0,7);
-  return DATA.kas.filter(t=>t.type==='keluar' && t.date.slice(0,7)===ym).reduce((s,t)=>s+t.amount,0);
-}
-
-// ---------- TABUNGAN ----------
-function tabunganBalance(memberId){
-  return DATA.tabungan.filter(t=>t.memberId===memberId)
-    .reduce((s,t)=> s + (t.type==='setor'? t.amount : -t.amount), 0);
-}
-function tabunganTotal(){
-  return DATA.tabungan.reduce((s,t)=> s + (t.type==='setor'? t.amount : -t.amount), 0);
-}
-
-// ---------- ARISAN ----------
-function arisanCollectedThisRound(round){
-  return Object.values(round.payments||{}).filter(Boolean).length * DATA.arisan.contribution;
-}
-
-// ================= RENDER =================
-function render(){
-  const main = document.getElementById('main');
-  if(currentTab==='ringkasan') main.innerHTML = renderRingkasan();
-  else if(currentTab==='kas') main.innerHTML = renderKas();
-  else if(currentTab==='tabungan') main.innerHTML = renderTabungan();
-  else if(currentTab==='arisan') main.innerHTML = renderArisan();
-  else if(currentTab==='anggota') main.innerHTML = renderAnggota();
-  attachHandlers();
-}
-
-function renderRingkasan(){
-  const totalKas = kasTotal();
-  const totalTabungan = tabunganTotal();
-  const lastKas = [...DATA.kas].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
-  return `
-    <div class="balance-hero">
-      <div class="label">Total Kas Keluarga</div>
-      <div class="amount">${rupiah(totalKas)}</div>
-      <div class="grid">
-        <div><div class="k">Masuk bulan ini</div><div class="v">${rupiah(kasMasukBulanIni())}</div></div>
-        <div><div class="k">Keluar bulan ini</div><div class="v">${rupiah(kasKeluarBulanIni())}</div></div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Total Tabungan Keluarga</h2>
-      <div style="font-family:Georgia,serif;font-size:24px;font-weight:700;color:var(--green);">${rupiah(totalTabungan)}</div>
-      <p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">${DATA.members.length} anggota tercatat</p>
-    </div>
-    <div class="card">
-      <h2>Mutasi Kas Terbaru</h2>
-      ${lastKas.length? lastKas.map(t=>`
-        <div class="row">
-          <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note? ' · '+escapeHtml(t.note):''}</span></div>
-          <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
-        </div>`).join('') : '<div class="empty">Belum ada transaksi kas.</div>'}
-    </div>
-    ${renderArisanReminderCard()}
-  `;
-}
-
-function renderArisanReminderCard(){
-  const rounds = DATA.arisan.rounds;
-  const active = rounds.find(r=>!r.completed);
-  if(!active) return '';
-  const collected = arisanCollectedThisRound(active);
-  const target = DATA.arisan.contribution * DATA.arisan.order.length;
-  return `
-    <div class="card">
-      <h2>Arisan Giliran Berjalan</h2>
-      <div class="row">
-        <div class="left"><span class="t">Penerima: ${escapeHtml(memberName(active.memberId))}</span><span class="s">Putaran #${active.roundNumber}</span></div>
-        <div class="amt in">${rupiah(collected)} / ${rupiah(target)}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderKas(){
-  const filterHtml = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-      <h2 style="margin:0;">Semua Transaksi</h2>
-    </div>`;
-  const list = [...DATA.kas].sort((a,b)=>b.date.localeCompare(a.date));
-  return `
-    <div class="card">
-      ${filterHtml}
-      ${list.length? list.map(t=>`
-        <div class="row">
-          <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note? ' · '+escapeHtml(t.note):''}</span></div>
-          <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
-        </div>`).join('') : '<div class="empty">Belum ada transaksi. Tekan tombol + untuk menambah.</div>'}
-    </div>
-  `;
-}
-
-function renderTabungan(){
-  if(DATA.members.length===0){
-    return `<div class="card"><div class="empty">Tambahkan anggota keluarga dulu di tab Anggota.</div></div>`;
+  function initials(name){
+    return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
   }
-  return `
-    <div class="card">
-      <h2>Saldo per Anggota</h2>
-      ${DATA.members.map(m=>{
-        const bal = tabunganBalance(m.id);
-        return `<div class="member-row">
-          <div class="avatar">${initials(m.name)}</div>
-          <div class="info"><div class="n">${escapeHtml(m.name)}</div><div class="b">${rupiah(bal)}</div></div>
-        </div>`;
-      }).join('')}
-    </div>
-    <div class="card">
-      <h2>Riwayat Setor/Tarik</h2>
-      ${DATA.tabungan.length? [...DATA.tabungan].sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`
-        <div class="row">
-          <div class="left"><span class="t">${escapeHtml(memberName(t.memberId))}</span><span class="s">${fmtDate(t.date)}${t.note? ' · '+escapeHtml(t.note):''}</span></div>
-          <div class="amt ${t.type==='setor'?'in':'out'}">${t.type==='setor'?'+':'-'}${rupiah(t.amount)}</div>
-        </div>`).join('') : '<div class="empty">Belum ada riwayat.</div>'}
-    </div>
-  `;
-}
-
-function renderArisan(){
-  const a = DATA.arisan;
-  if(DATA.members.length===0){
-    return `<div class="card"><div class="empty">Tambahkan anggota keluarga dulu di tab Anggota.</div></div>`;
+  function escapeHtml(s){
+    return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
-  const orderNames = a.order.map(id=>memberName(id));
-  return `
-    <div class="card">
-      <h2>Pengaturan Arisan</h2>
-      <div class="row">
-        <div class="left"><span class="t">Iuran per giliran</span><span class="s">Per anggota, per putaran</span></div>
-        <div class="amt in">${rupiah(a.contribution)}</div>
-      </div>
-      <button class="btn ghost small" id="btnEditContribution" style="margin-top:8px;">Ubah Iuran</button>
-      <button class="btn ghost small" id="btnEditOrder" style="margin-top:8px;margin-left:8px;">Atur Urutan (${a.order.length} orang)</button>
-    </div>
 
-    ${a.order.length===0 ? `<div class="card"><div class="empty">Atur urutan giliran arisan terlebih dahulu.</div></div>` : `
-    <div class="card">
-      <h2>Urutan Giliran</h2>
-      <div class="arisan-order">
-        ${a.order.map((id,i)=>{
-          const done = a.rounds.some(r=>r.memberId===id && r.completed);
-          return `<div class="stop ${done?'done':''}">
-            <div class="num">#${i+1}</div>
-            <div class="nm">${escapeHtml(memberName(id))}</div>
-            <div class="st">${done? '✓ Selesai' : '–'}</div>
-          </div>`;
-        }).join('')}
-      </div>
-      <button class="btn gold block" id="btnStartRound" style="margin-top:6px;">Mulai Putaran Baru</button>
-    </div>`}
-
-    <div class="card">
-      <h2>Riwayat Putaran</h2>
-      ${a.rounds.length? [...a.rounds].sort((x,y)=>y.roundNumber-x.roundNumber).map(r=>{
-        const collected = arisanCollectedThisRound(r);
-        const target = a.contribution * a.order.length;
-        return `
-        <div class="row" style="align-items:flex-start;cursor:pointer;" data-open-round="${r.id}">
-          <div class="left">
-            <span class="t">Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</span>
-            <span class="s">${fmtDate(r.date)} · ${r.completed? '<span class=\"pill\">Selesai</span>' : '<span class=\"pill due\">Berjalan</span>'}</span>
-          </div>
-          <div class="amt in">${rupiah(collected)}/${rupiah(target)}</div>
-        </div>`;
-      }).join('') : '<div class="empty">Belum ada putaran arisan.</div>'}
-    </div>
-  `;
-}
-
-function renderAnggota(){
-  return `
-    <div class="card">
-      <h2>Anggota Keluarga</h2>
-      ${DATA.members.length? DATA.members.map(m=>`
-        <div class="member-row">
-          <div class="avatar">${initials(m.name)}</div>
-          <div class="info"><div class="n">${escapeHtml(m.name)}</div><div class="b">Tabungan: ${rupiah(tabunganBalance(m.id))}</div></div>
-          <button class="btn danger small" data-del-member="${m.id}">Hapus</button>
-        </div>`).join('') : '<div class="empty">Belum ada anggota.</div>'}
-      <button class="btn block gold" id="btnAddMember" style="margin-top:12px;">+ Tambah Anggota</button>
-    </div>
-    <div class="shared-note">Data ini dibagikan ke semua orang yang membuka aplikasi ini.</div>
-  `;
-}
-
-function escapeHtml(s){
-  return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// ================= SHEETS (modals) =================
-function openSheet(html){
-  const root = document.getElementById('sheetRoot');
-  root.innerHTML = `<div class="sheet-overlay" id="sheetOverlay"><div class="sheet" style="position:relative;">
-    <button class="close-x" id="sheetClose">✕</button>${html}</div></div>`;
-  document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
-  document.getElementById('sheetClose').addEventListener('click', closeSheet);
-}
-function closeSheet(){ document.getElementById('sheetRoot').innerHTML=''; }
-
-function sheetAddKas(){
-  openSheet(`
-    <h3>Tambah Transaksi Kas</h3>
-    <div class="seg" id="kasTypeSeg">
-      <button type="button" class="on in" data-val="masuk">Uang Masuk</button>
-      <button type="button" data-val="keluar">Uang Keluar</button>
-    </div>
-    <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="kasAmount" inputmode="numeric" placeholder="0"></div>
-    <div class="field"><label>Kategori</label><input type="text" id="kasCategory" placeholder="mis. Belanja bulanan, Iuran, THR"></div>
-    <div class="field"><label>Tanggal</label><input type="date" id="kasDate" value="${todayStr()}"></div>
-    <div class="field"><label>Catatan (opsional)</label><input type="text" id="kasNote" placeholder="Catatan tambahan"></div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="cancelKas">Batal</button>
-      <button class="btn gold" id="saveKas">Simpan</button>
-    </div>
-  `);
-  let kasType = 'masuk';
-  document.querySelectorAll('#kasTypeSeg button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      kasType = b.dataset.val;
-      document.querySelectorAll('#kasTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));
-      b.classList.add('on', kasType==='masuk'?'in':'out');
-    });
-  });
-  document.getElementById('cancelKas').addEventListener('click', closeSheet);
-  document.getElementById('saveKas').addEventListener('click', async ()=>{
-    const amount = Number(document.getElementById('kasAmount').value);
-    const category = document.getElementById('kasCategory').value.trim();
-    const date = document.getElementById('kasDate').value || todayStr();
-    const note = document.getElementById('kasNote').value.trim();
-    if(!amount || amount<=0){ alert('Isi jumlah yang valid'); return; }
-    DATA.kas.push({id:uid(), type:kasType, amount, category: category||(kasType==='masuk'?'Pemasukan':'Pengeluaran'), date, note});
-    await saveData();
-    closeSheet(); render();
-  });
-}
-
-function sheetAddTabungan(){
-  if(DATA.members.length===0){ alert('Tambahkan anggota keluarga dulu di tab Anggota.'); return; }
-  openSheet(`
-    <h3>Tambah Setor / Tarik Tabungan</h3>
-    <div class="field"><label>Anggota</label>
-      <select id="tbMember">${DATA.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>
-    </div>
-    <div class="seg" id="tbTypeSeg">
-      <button type="button" class="on in" data-val="setor">Setor</button>
-      <button type="button" data-val="tarik">Tarik</button>
-    </div>
-    <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="tbAmount" inputmode="numeric" placeholder="0"></div>
-    <div class="field"><label>Tanggal</label><input type="date" id="tbDate" value="${todayStr()}"></div>
-    <div class="field"><label>Catatan (opsional)</label><input type="text" id="tbNote" placeholder="Catatan tambahan"></div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="cancelTb">Batal</button>
-      <button class="btn gold" id="saveTb">Simpan</button>
-    </div>
-  `);
-  let tbType='setor';
-  document.querySelectorAll('#tbTypeSeg button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      tbType = b.dataset.val;
-      document.querySelectorAll('#tbTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));
-      b.classList.add('on', tbType==='setor'?'in':'out');
-    });
-  });
-  document.getElementById('cancelTb').addEventListener('click', closeSheet);
-  document.getElementById('saveTb').addEventListener('click', async ()=>{
-    const memberId = document.getElementById('tbMember').value;
-    const amount = Number(document.getElementById('tbAmount').value);
-    const date = document.getElementById('tbDate').value || todayStr();
-    const note = document.getElementById('tbNote').value.trim();
-    if(!amount || amount<=0){ alert('Isi jumlah yang valid'); return; }
-    DATA.tabungan.push({id:uid(), memberId, type:tbType, amount, date, note});
-    await saveData();
-    closeSheet(); render();
-  });
-}
-
-function sheetAddMember(){
-  openSheet(`
-    <h3>Tambah Anggota Keluarga</h3>
-    <div class="field"><label>Nama</label><input type="text" id="memberName" placeholder="mis. Ibu, Bapak, Kak Dinda"></div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="cancelMember">Batal</button>
-      <button class="btn gold" id="saveMember">Simpan</button>
-    </div>
-  `);
-  document.getElementById('cancelMember').addEventListener('click', closeSheet);
-  document.getElementById('saveMember').addEventListener('click', async ()=>{
-    const name = document.getElementById('memberName').value.trim();
-    if(!name){ alert('Isi nama anggota'); return; }
-    DATA.members.push({id:uid(), name});
-    await saveData();
-    closeSheet(); render();
-  });
-}
-
-function sheetEditContribution(){
-  openSheet(`
-    <h3>Ubah Iuran Arisan</h3>
-    <div class="field"><label>Iuran per anggota per putaran (Rp)</label><input type="number" id="contribAmount" value="${DATA.arisan.contribution||''}" inputmode="numeric"></div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="cancelContrib">Batal</button>
-      <button class="btn gold" id="saveContrib">Simpan</button>
-    </div>
-  `);
-  document.getElementById('cancelContrib').addEventListener('click', closeSheet);
-  document.getElementById('saveContrib').addEventListener('click', async ()=>{
-    const val = Number(document.getElementById('contribAmount').value);
-    DATA.arisan.contribution = val>0? val : 0;
-    await saveData();
-    closeSheet(); render();
-  });
-}
-
-function sheetEditOrder(){
-  const selected = new Set(DATA.arisan.order);
-  openSheet(`
-    <h3>Atur Urutan Giliran</h3>
-    <p style="font-size:12.5px;color:var(--muted);margin-top:-6px;">Pilih anggota sesuai urutan giliran menerima arisan (klik untuk menambah ke urutan).</p>
-    <div id="orderPicker">
-      ${DATA.members.map(m=>`<button type="button" class="member-chip" data-pick="${m.id}" style="${selected.has(m.id)?'':'opacity:.45'}">${escapeHtml(m.name)}</button>`).join('')}
-    </div>
-    <div class="field" style="margin-top:10px;"><label>Urutan saat ini</label>
-      <div id="orderList" style="font-size:13px;color:var(--ink);">${DATA.arisan.order.map((id,i)=>`${i+1}. ${escapeHtml(memberName(id))}`).join('<br>')||'Belum ada'}</div>
-    </div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="clearOrder">Kosongkan</button>
-      <button class="btn gold" id="doneOrder">Selesai</button>
-    </div>
-  `);
-  let order = [...DATA.arisan.order];
-  function refreshList(){
-    document.getElementById('orderList').innerHTML = order.map((id,i)=>`${i+1}. ${escapeHtml(memberName(id))}`).join('<br>') || 'Belum ada';
+  function defaultData(){
+    return {members:[],kas:[],tabungan:[],arisan:{contribution:0,order:[],rounds:[]}};
   }
-  document.querySelectorAll('[data-pick]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.dataset.pick;
-      const idx = order.indexOf(id);
-      if(idx>=0){ order.splice(idx,1); btn.style.opacity='.45'; }
-      else { order.push(id); btn.style.opacity='1'; }
-      refreshList();
-    });
-  });
-  document.getElementById('clearOrder').addEventListener('click', ()=>{ order=[]; document.querySelectorAll('[data-pick]').forEach(b=>b.style.opacity='.45'); refreshList(); });
-  document.getElementById('doneOrder').addEventListener('click', async ()=>{
-    DATA.arisan.order = order;
-    await saveData();
-    closeSheet(); render();
-  });
-}
 
-async function startNewRound(){
-  const a = DATA.arisan;
-  if(a.order.length===0){ alert('Atur urutan giliran dulu.'); return; }
-  const doneIds = new Set(a.rounds.filter(r=>r.completed).map(r=>r.memberId));
-  const next = a.order.find(id=>!doneIds.has(id));
-  if(!next){ alert('Semua anggota sudah mendapat giliran. Kosongkan riwayat untuk mulai putaran baru dari awal.'); return; }
-  const roundNumber = a.rounds.length + 1;
-  const payments = {};
-  a.order.forEach(id=>{ payments[id]=false; });
-  a.rounds.push({ id:uid(), roundNumber, memberId: next, date: todayStr(), payments, completed:false });
-  await saveData();
-  render();
-}
+  // ---------- AUTH ----------
+  async function refreshAuth(){
+    const {data:{session:s}} = await supabaseClient.auth.getSession();
+    session = s;
+    isAdmin = false;
 
-function sheetOpenRound(roundId){
-  const r = DATA.arisan.rounds.find(x=>x.id===roundId);
-  if(!r) return;
-  openSheet(`
-    <h3>Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</h3>
-    <p style="font-size:12.5px;color:var(--muted);margin-top:-6px;">Tandai anggota yang sudah membayar iuran putaran ini.</p>
-    <div id="paymentsList">
-      ${DATA.arisan.order.map(id=>`
-        <div class="pay-chip">
-          <span>${escapeHtml(memberName(id))}</span>
-          <button class="toggle ${r.payments[id]?'on':''}" data-toggle-pay="${id}"><span class="dot"></span></button>
-        </div>`).join('')}
-    </div>
-    <div class="sheet-actions">
-      ${r.completed? '' : `<button class="btn gold block" id="markComplete">Tandai Selesai</button>`}
-    </div>
-    ${r.completed? '<div class="shared-note">Putaran ini sudah selesai.</div>' : ''}
-  `);
-  document.querySelectorAll('[data-toggle-pay]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const id = btn.dataset.togglePay;
-      r.payments[id] = !r.payments[id];
-      btn.classList.toggle('on', r.payments[id]);
-      await saveData();
-    });
-  });
-  const mc = document.getElementById('markComplete');
-  if(mc) mc.addEventListener('click', async ()=>{
-    r.completed = true;
-    await saveData();
-    closeSheet(); render();
-  });
-}
+    if(session?.user){
+      const {data:profile,error} = await supabaseClient
+        .from('profiles')
+        .select('is_admin')
+        .eq('id',session.user.id)
+        .maybeSingle();
 
-// ================= EVENTS =================
-function attachHandlers(){
-  document.getElementById('btnAddMember')?.addEventListener('click', sheetAddMember);
-  document.getElementById('btnEditContribution')?.addEventListener('click', sheetEditContribution);
-  document.getElementById('btnEditOrder')?.addEventListener('click', sheetEditOrder);
-  document.getElementById('btnStartRound')?.addEventListener('click', startNewRound);
-  document.querySelectorAll('[data-del-member]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const id = btn.dataset.delMember;
-      if(!confirm('Hapus anggota ini? Riwayat tabungan/arisan terkait tetap tersimpan.')) return;
-      DATA.members = DATA.members.filter(m=>m.id!==id);
-      await saveData();
-      render();
-    });
-  });
-  document.querySelectorAll('[data-open-round]').forEach(el=>{
-    el.addEventListener('click', ()=> sheetOpenRound(el.dataset.openRound));
-  });
-}
+      if(!error && profile?.is_admin === true) isAdmin = true;
+    }
+    updateAuthUI();
+  }
 
-document.querySelectorAll('nav.tabbar button').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentTab = btn.dataset.tab;
+  function updateAuthUI(){
+    const box = document.getElementById('authBox');
+    if(!box) return;
+
+    if(session?.user){
+      box.innerHTML = isAdmin
+        ? `<span>🔐 <b>Admin aktif</b></span><button class="btn ghost small" id="logoutBtn">Keluar Admin</button>`
+        : `<span>👤 ${escapeHtml(session.user.email||'Pengguna')}</span><button class="btn ghost small" id="logoutBtn">Keluar</button>`;
+      document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    }else{
+      box.innerHTML = `<span style="color:var(--muted);font-size:13px;">Mode lihat</span><button class="btn ghost small" id="loginBtn">🔐 Login Admin</button>`;
+      document.getElementById('loginBtn')?.addEventListener('click', sheetLogin);
+    }
+
+    const fab=document.getElementById('fab');
+    if(fab) fab.style.display = isAdmin ? 'flex' : 'none';
     render();
+  }
+
+  async function logout(){
+    await supabaseClient.auth.signOut();
+    session=null;
+    isAdmin=false;
+    updateAuthUI();
+    alert('Berhasil keluar dari Admin.');
+  }
+
+  function sheetLogin(){
+    openSheet(`
+      <h3>Login Admin</h3>
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="admin@gmail.com" autocomplete="email"></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password"></div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="cancelLogin">Batal</button>
+        <button class="btn gold" id="doLogin">Login</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">Gunakan akun yang sudah dibuat di Supabase Authentication.</p>
+    `);
+    document.getElementById('cancelLogin').addEventListener('click',closeSheet);
+    document.getElementById('doLogin').addEventListener('click',async()=>{
+      const email=document.getElementById('loginEmail').value.trim();
+      const password=document.getElementById('loginPassword').value;
+      if(!email||!password){alert('Email dan password wajib diisi.');return;}
+      const btn=document.getElementById('doLogin');
+      btn.disabled=true; btn.textContent='Memproses...';
+
+      const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+      if(error){
+        btn.disabled=false; btn.textContent='Login';
+        alert('Login gagal: '+error.message);
+        return;
+      }
+
+      await refreshAuth();
+      if(!isAdmin){
+        await supabaseClient.auth.signOut();
+        session=null; isAdmin=false; updateAuthUI();
+        alert('Akun berhasil login, tetapi belum memiliki hak Admin.');
+        return;
+      }
+      closeSheet();
+      alert('Login Admin berhasil.');
+    });
+  }
+
+  // ---------- DATA SUPABASE ----------
+  async function loadData(){
+    const {data,error}=await supabaseClient
+      .from('app_data')
+      .select('data')
+      .eq('id',APP_DATA_ID)
+      .maybeSingle();
+
+    if(error){
+      console.error('Supabase load error:',error);
+      DATA=defaultData();
+      showDataError('Data Supabase belum bisa dibaca. Pastikan tabel app_data dan policy SELECT sudah dibuat.');
+      return;
+    }
+
+    DATA = data?.data ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data) : defaultData();
+    if(!DATA.members) DATA.members=[];
+    if(!DATA.kas) DATA.kas=[];
+    if(!DATA.tabungan) DATA.tabungan=[];
+    if(!DATA.arisan) DATA.arisan={contribution:0,order:[],rounds:[]};
+  }
+
+  async function saveData(){
+    if(!isAdmin){
+      alert('Hanya Admin yang dapat mengubah data.');
+      return false;
+    }
+
+    const {error}=await supabaseClient
+      .from('app_data')
+      .upsert({id:APP_DATA_ID,data:DATA,updated_at:new Date().toISOString()},{onConflict:'id'});
+
+    if(error){
+      console.error('Supabase save error:',error);
+      alert('Data gagal disimpan ke Supabase: '+error.message);
+      return false;
+    }
+    return true;
+  }
+
+  function showDataError(msg){
+    const main=document.getElementById('main');
+    if(main) main.innerHTML=`<div class="card"><div class="empty">${escapeHtml(msg)}</div></div>`;
+  }
+
+  // ---------- KAS ----------
+  function kasTotal(){return DATA.kas.reduce((s,t)=>s+(t.type==='masuk'?t.amount:-t.amount),0);}
+  function kasMasukBulanIni(){
+    const ym=todayStr().slice(0,7);
+    return DATA.kas.filter(t=>t.type==='masuk'&&t.date.slice(0,7)===ym).reduce((s,t)=>s+t.amount,0);
+  }
+  function kasKeluarBulanIni(){
+    const ym=todayStr().slice(0,7);
+    return DATA.kas.filter(t=>t.type==='keluar'&&t.date.slice(0,7)===ym).reduce((s,t)=>s+t.amount,0);
+  }
+
+  // ---------- TABUNGAN ----------
+  function tabunganBalance(memberId){
+    return DATA.tabungan.filter(t=>t.memberId===memberId).reduce((s,t)=>s+(t.type==='setor'?t.amount:-t.amount),0);
+  }
+  function tabunganTotal(){return DATA.tabungan.reduce((s,t)=>s+(t.type==='setor'?t.amount:-t.amount),0);}
+
+  // ---------- ARISAN ----------
+  function arisanCollectedThisRound(round){
+    return Object.values(round.payments||{}).filter(Boolean).length*DATA.arisan.contribution;
+  }
+  function memberName(id){
+    const m=DATA.members.find(m=>m.id===id);
+    return m?m.name:'—';
+  }
+
+  // ================= RENDER =================
+  function render(){
+    if(!DATA) return;
+    const main=document.getElementById('main');
+    if(currentTab==='ringkasan') main.innerHTML=renderRingkasan();
+    else if(currentTab==='kas') main.innerHTML=renderKas();
+    else if(currentTab==='tabungan') main.innerHTML=renderTabungan();
+    else if(currentTab==='arisan') main.innerHTML=renderArisan();
+    else if(currentTab==='anggota') main.innerHTML=renderAnggota();
+    attachHandlers();
+  }
+
+  function renderRingkasan(){
+    const totalKas=kasTotal(),totalTabungan=tabunganTotal();
+    const lastKas=[...DATA.kas].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
+    return `
+      ${isAdmin?'<div class="card" style="padding:10px 14px;margin-bottom:14px;"><b>🔐 Admin aktif</b><span style="color:var(--muted);font-size:12px;"> Data dapat diubah dan tersimpan online.</span></div>':''}
+      <div class="balance-hero">
+        <div class="label">Total Kas Keluarga</div>
+        <div class="amount">${rupiah(totalKas)}</div>
+        <div class="grid">
+          <div><div class="k">Masuk bulan ini</div><div class="v">${rupiah(kasMasukBulanIni())}</div></div>
+          <div><div class="k">Keluar bulan ini</div><div class="v">${rupiah(kasKeluarBulanIni())}</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Total Tabungan Keluarga</h2>
+        <div style="font-family:Georgia,serif;font-size:24px;font-weight:700;color:var(--green);">${rupiah(totalTabungan)}</div>
+        <p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">${DATA.members.length} anggota tercatat</p>
+      </div>
+      <div class="card">
+        <h2>Mutasi Kas Terbaru</h2>
+        ${lastKas.length?lastKas.map(t=>`
+          <div class="row">
+            <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
+            <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
+          </div>`).join(''):'<div class="empty">Belum ada transaksi kas.</div>'}
+      </div>
+      ${renderArisanReminderCard()}
+    `;
+  }
+
+  function renderArisanReminderCard(){
+    const active=DATA.arisan.rounds.find(r=>!r.completed);
+    if(!active)return '';
+    const collected=arisanCollectedThisRound(active);
+    const target=DATA.arisan.contribution*DATA.arisan.order.length;
+    return `<div class="card"><h2>Arisan Giliran Berjalan</h2><div class="row">
+      <div class="left"><span class="t">Penerima: ${escapeHtml(memberName(active.memberId))}</span><span class="s">Putaran #${active.roundNumber}</span></div>
+      <div class="amt in">${rupiah(collected)} / ${rupiah(target)}</div>
+    </div></div>`;
+  }
+
+  function renderKas(){
+    const list=[...DATA.kas].sort((a,b)=>b.date.localeCompare(a.date));
+    return `<div class="card"><h2>Semua Transaksi</h2>
+      ${list.length?list.map(t=>`<div class="row">
+        <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
+        <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
+      </div>`).join(''):'<div class="empty">Belum ada transaksi.</div>'}</div>`;
+  }
+
+  function renderTabungan(){
+    if(DATA.members.length===0)return `<div class="card"><div class="empty">Belum ada anggota.</div></div>`;
+    return `<div class="card"><h2>Saldo per Anggota</h2>
+      ${DATA.members.map(m=>`<div class="member-row"><div class="avatar">${initials(m.name)}</div>
+        <div class="info"><div class="n">${escapeHtml(m.name)}</div><div class="b">${rupiah(tabunganBalance(m.id))}</div></div>
+      </div>`).join('')}</div>
+      <div class="card"><h2>Riwayat Setor/Tarik</h2>
+      ${DATA.tabungan.length?[...DATA.tabungan].sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`
+        <div class="row"><div class="left"><span class="t">${escapeHtml(memberName(t.memberId))}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
+        <div class="amt ${t.type==='setor'?'in':'out'}">${t.type==='setor'?'+':'-'}${rupiah(t.amount)}</div></div>`).join(''):'<div class="empty">Belum ada riwayat.</div>'}
+      </div>`;
+  }
+
+  function renderArisan(){
+    const a=DATA.arisan;
+    if(DATA.members.length===0)return `<div class="card"><div class="empty">Belum ada anggota.</div></div>`;
+    return `<div class="card">
+      <h2>Pengaturan Arisan</h2>
+      <div class="row"><div class="left"><span class="t">Iuran per giliran</span><span class="s">Per anggota, per putaran</span></div><div class="amt in">${rupiah(a.contribution)}</div></div>
+      ${isAdmin?`<button class="btn ghost small" id="btnEditContribution" style="margin-top:8px;">Ubah Iuran</button>
+      <button class="btn ghost small" id="btnEditOrder" style="margin-top:8px;margin-left:8px;">Atur Urutan (${a.order.length} orang)</button>`:''}
+    </div>
+    ${a.order.length===0?`<div class="card"><div class="empty">Belum ada urutan giliran arisan.</div></div>`:`<div class="card"><h2>Urutan Giliran</h2><div class="arisan-order">
+      ${a.order.map((id,i)=>{const done=a.rounds.some(r=>r.memberId===id&&r.completed);return `<div class="stop ${done?'done':''}">
+        <div class="num">#${i+1}</div><div class="nm">${escapeHtml(memberName(id))}</div><div class="st">${done?'✓ Selesai':'–'}</div></div>`}).join('')}
+      </div>${isAdmin?`<button class="btn gold block" id="btnStartRound" style="margin-top:6px;">Mulai Putaran Baru</button>`:''}</div>`}
+    <div class="card"><h2>Riwayat Putaran</h2>
+      ${a.rounds.length?[...a.rounds].sort((x,y)=>y.roundNumber-x.roundNumber).map(r=>{
+        const collected=arisanCollectedThisRound(r),target=a.contribution*a.order.length;
+        return `<div class="row" style="align-items:flex-start;${isAdmin?'cursor:pointer;':''}" ${isAdmin?`data-open-round="${r.id}"`:''}>
+          <div class="left"><span class="t">Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</span>
+          <span class="s">${fmtDate(r.date)} · ${r.completed?'<span class="pill">Selesai</span>':'<span class="pill due">Berjalan</span>'}</span></div>
+          <div class="amt in">${rupiah(collected)}/${rupiah(target)}</div>
+        </div>`}).join(''):'<div class="empty">Belum ada putaran arisan.</div>'}
+    </div>`;
+  }
+
+  function renderAnggota(){
+    return `<div class="card"><h2>Anggota Keluarga</h2>
+      ${DATA.members.length?DATA.members.map(m=>`<div class="member-row"><div class="avatar">${initials(m.name)}</div>
+        <div class="info"><div class="n">${escapeHtml(m.name)}</div><div class="b">Tabungan: ${rupiah(tabunganBalance(m.id))}</div></div>
+        ${isAdmin?`<button class="btn danger small" data-del-member="${m.id}">Hapus</button>`:''}
+      </div>`).join(''):'<div class="empty">Belum ada anggota.</div>'}
+      ${isAdmin?`<button class="btn block gold" id="btnAddMember" style="margin-top:12px;">+ Tambah Anggota</button>`:''}
+    </div>
+    <div class="shared-note">Data tersimpan di Supabase dan dapat diakses dari perangkat lain.</div>`;
+  }
+
+  // ================= SHEETS =================
+  function openSheet(html){
+    const root=document.getElementById('sheetRoot');
+    root.innerHTML=`<div class="sheet-overlay" id="sheetOverlay"><div class="sheet" style="position:relative;">
+      <button class="close-x" id="sheetClose">✕</button>${html}</div></div>`;
+    document.getElementById('sheetOverlay').addEventListener('click',e=>{if(e.target.id==='sheetOverlay')closeSheet();});
+    document.getElementById('sheetClose').addEventListener('click',closeSheet);
+  }
+  function closeSheet(){document.getElementById('sheetRoot').innerHTML='';}
+
+  function sheetAddKas(){
+    if(!isAdmin)return;
+    openSheet(`<h3>Tambah Transaksi Kas</h3>
+      <div class="seg" id="kasTypeSeg"><button type="button" class="on in" data-val="masuk">Uang Masuk</button><button type="button" data-val="keluar">Uang Keluar</button></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="kasAmount" inputmode="numeric"></div>
+      <div class="field"><label>Kategori</label><input type="text" id="kasCategory" placeholder="mis. Iuran"></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="kasDate" value="${todayStr()}"></div>
+      <div class="field"><label>Catatan</label><input type="text" id="kasNote"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelKas">Batal</button><button class="btn gold" id="saveKas">Simpan</button></div>`);
+    let kasType='masuk';
+    document.querySelectorAll('#kasTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
+      kasType=b.dataset.val;document.querySelectorAll('#kasTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));b.classList.add('on',kasType==='masuk'?'in':'out');
+    }));
+    document.getElementById('cancelKas').addEventListener('click',closeSheet);
+    document.getElementById('saveKas').addEventListener('click',async()=>{
+      const amount=Number(document.getElementById('kasAmount').value);
+      if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
+      DATA.kas.push({id:uid(),type:kasType,amount,category:document.getElementById('kasCategory').value.trim()||(kasType==='masuk'?'Pemasukan':'Pengeluaran'),date:document.getElementById('kasDate').value||todayStr(),note:document.getElementById('kasNote').value.trim()});
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  function sheetAddTabungan(){
+    if(!isAdmin)return;
+    if(DATA.members.length===0){alert('Tambahkan anggota keluarga dulu.');return;}
+    openSheet(`<h3>Tambah Setor / Tarik Tabungan</h3>
+      <div class="field"><label>Anggota</label><select id="tbMember">${DATA.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="seg" id="tbTypeSeg"><button type="button" class="on in" data-val="setor">Setor</button><button type="button" data-val="tarik">Tarik</button></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="tbAmount"></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="tbDate" value="${todayStr()}"></div>
+      <div class="field"><label>Catatan</label><input type="text" id="tbNote"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelTb">Batal</button><button class="btn gold" id="saveTb">Simpan</button></div>`);
+    let tbType='setor';
+    document.querySelectorAll('#tbTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
+      tbType=b.dataset.val;document.querySelectorAll('#tbTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));b.classList.add('on',tbType==='setor'?'in':'out');
+    }));
+    document.getElementById('cancelTb').addEventListener('click',closeSheet);
+    document.getElementById('saveTb').addEventListener('click',async()=>{
+      const amount=Number(document.getElementById('tbAmount').value);
+      if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
+      DATA.tabungan.push({id:uid(),memberId:document.getElementById('tbMember').value,type:tbType,amount,date:document.getElementById('tbDate').value||todayStr(),note:document.getElementById('tbNote').value.trim()});
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  function sheetAddMember(){
+    if(!isAdmin)return;
+    openSheet(`<h3>Tambah Anggota Keluarga</h3>
+      <div class="field"><label>Nama</label><input type="text" id="memberName" placeholder="mis. Ibu, Bapak"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelMember">Batal</button><button class="btn gold" id="saveMember">Simpan</button></div>`);
+    document.getElementById('cancelMember').addEventListener('click',closeSheet);
+    document.getElementById('saveMember').addEventListener('click',async()=>{
+      const name=document.getElementById('memberName').value.trim();
+      if(!name){alert('Isi nama anggota');return;}
+      DATA.members.push({id:uid(),name});
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  function sheetEditContribution(){
+    if(!isAdmin)return;
+    openSheet(`<h3>Ubah Iuran Arisan</h3><div class="field"><label>Iuran per anggota per putaran (Rp)</label><input type="number" id="contribAmount" value="${DATA.arisan.contribution||''}"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelContrib">Batal</button><button class="btn gold" id="saveContrib">Simpan</button></div>`);
+    document.getElementById('cancelContrib').addEventListener('click',closeSheet);
+    document.getElementById('saveContrib').addEventListener('click',async()=>{
+      DATA.arisan.contribution=Math.max(0,Number(document.getElementById('contribAmount').value)||0);
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  function sheetEditOrder(){
+    if(!isAdmin)return;
+    let order=[...DATA.arisan.order];
+    openSheet(`<h3>Atur Urutan Giliran</h3><p style="font-size:12.5px;color:var(--muted);">Klik anggota untuk menambah/menghapus dari urutan.</p>
+      <div id="orderPicker">${DATA.members.map(m=>`<button type="button" class="member-chip" data-pick="${m.id}" style="${order.includes(m.id)?'':'opacity:.45'}">${escapeHtml(m.name)}</button>`).join('')}</div>
+      <div class="field" style="margin-top:10px;"><label>Urutan saat ini</label><div id="orderList"></div></div>
+      <div class="sheet-actions"><button class="btn ghost" id="clearOrder">Kosongkan</button><button class="btn gold" id="doneOrder">Selesai</button></div>`);
+    const refresh=()=>document.getElementById('orderList').innerHTML=order.map((id,i)=>`${i+1}. ${escapeHtml(memberName(id))}`).join('<br>')||'Belum ada';
+    refresh();
+    document.querySelectorAll('[data-pick]').forEach(btn=>btn.addEventListener('click',()=>{
+      const id=btn.dataset.pick,idx=order.indexOf(id);
+      if(idx>=0){order.splice(idx,1);btn.style.opacity='.45';}else{order.push(id);btn.style.opacity='1';}refresh();
+    }));
+    document.getElementById('clearOrder').addEventListener('click',()=>{order=[];document.querySelectorAll('[data-pick]').forEach(b=>b.style.opacity='.45');refresh();});
+    document.getElementById('doneOrder').addEventListener('click',async()=>{
+      DATA.arisan.order=order;
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  async function startNewRound(){
+    if(!isAdmin)return;
+    const a=DATA.arisan;
+    if(a.order.length===0){alert('Atur urutan giliran dulu.');return;}
+    const doneIds=new Set(a.rounds.filter(r=>r.completed).map(r=>r.memberId));
+    const next=a.order.find(id=>!doneIds.has(id));
+    if(!next){alert('Semua anggota sudah mendapat giliran.');return;}
+    a.rounds.push({id:uid(),roundNumber:a.rounds.length+1,memberId:next,date:todayStr(),payments:Object.fromEntries(a.order.map(id=>[id,false])),completed:false});
+    if(await saveData())render();
+  }
+
+  function sheetOpenRound(roundId){
+    if(!isAdmin)return;
+    const r=DATA.arisan.rounds.find(x=>x.id===roundId);if(!r)return;
+    openSheet(`<h3>Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</h3><p style="font-size:12.5px;color:var(--muted);">Tandai anggota yang sudah membayar.</p>
+      <div id="paymentsList">${DATA.arisan.order.map(id=>`<div class="pay-chip"><span>${escapeHtml(memberName(id))}</span><button class="toggle ${r.payments[id]?'on':''}" data-toggle-pay="${id}"><span class="dot"></span></button></div>`).join('')}</div>
+      <div class="sheet-actions">${r.completed?'':`<button class="btn gold block" id="markComplete">Tandai Selesai</button>`}</div>`);
+    document.querySelectorAll('[data-toggle-pay]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const id=btn.dataset.togglePay;r.payments[id]=!r.payments[id];btn.classList.toggle('on',r.payments[id]);await saveData();
+    }));
+    document.getElementById('markComplete')?.addEventListener('click',async()=>{r.completed=true;if(await saveData()){closeSheet();render();}});
+  }
+
+  // ================= EVENTS =================
+  function attachHandlers(){
+    document.getElementById('btnAddMember')?.addEventListener('click',sheetAddMember);
+    document.getElementById('btnEditContribution')?.addEventListener('click',sheetEditContribution);
+    document.getElementById('btnEditOrder')?.addEventListener('click',sheetEditOrder);
+    document.getElementById('btnStartRound')?.addEventListener('click',startNewRound);
+
+    document.querySelectorAll('[data-del-member]').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(!isAdmin)return;
+      if(!confirm('Hapus anggota ini? Riwayat terkait tetap tersimpan.'))return;
+      DATA.members=DATA.members.filter(m=>m.id!==btn.dataset.delMember);
+      if(await saveData())render();
+    }));
+    document.querySelectorAll('[data-open-round]').forEach(el=>el.addEventListener('click',()=>sheetOpenRound(el.dataset.openRound)));
+  }
+
+  document.querySelectorAll('nav.tabbar button').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');currentTab=btn.dataset.tab;render();
+  }));
+
+  document.getElementById('fab').addEventListener('click',()=>{
+    if(!isAdmin)return;
+    if(currentTab==='tabungan')sheetAddTabungan();
+    else if(currentTab==='anggota')sheetAddMember();
+    else sheetAddKas();
   });
-});
 
-document.getElementById('fab').addEventListener('click', ()=>{
-  if(currentTab==='tabungan') sheetAddTabungan();
-  else if(currentTab==='anggota') sheetAddMember();
-  else sheetAddKas();
-});
+  // ================= INIT =================
+  (async function init(){
+    const main=document.getElementById('main');
+    main.innerHTML='<div class="loading">Menghubungkan ke Supabase…</div>';
 
-// ================= INIT =================
-(async function init(){
-  await loadData();
-  render();
-})();
+    await refreshAuth();
+    await loadData();
+    render();
+
+    supabaseClient.auth.onAuthStateChange(async()=>{await refreshAuth();});
+  })();
+
 </script>
 </body>
 </html>
