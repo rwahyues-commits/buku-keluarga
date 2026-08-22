@@ -118,6 +118,11 @@
   .btn.small{padding:7px 12px;font-size:12.5px;border-radius:8px;}
   .btn.block{width:100%;}
   .btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+  .action-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .action-row .btn{min-width:68px;}
+  .row-main{flex:1;min-width:0;}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;}
+  .row-actions .btn{padding:6px 9px;font-size:11.5px;}
 
   .fab{
     position:fixed;right:18px;bottom:96px;z-index:20;
@@ -599,8 +604,17 @@
       <div class="card">
         <h2>Mutasi Kas Terbaru</h2>
         ${lastKas.length?lastKas.map(t=>`
-          <div class="row">
-            <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
+          <div class="row" style="align-items:flex-start;">
+            <div class="row-main">
+              <div class="left">
+                <span class="t">${escapeHtml(t.category||'-')}</span>
+                <span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span>
+              </div>
+              ${isAdmin?`<div class="row-actions">
+                <button class="btn ghost" data-edit-kas="${t.id}" type="button">✏️ Edit</button>
+                <button class="btn danger" data-del-kas="${t.id}" type="button">🗑️ Hapus</button>
+              </div>`:''}
+            </div>
             <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
           </div>`).join(''):'<div class="empty">Belum ada transaksi kas.</div>'}
       </div>
@@ -622,8 +636,17 @@
   function renderKas(){
     const list=[...DATA.kas].sort((a,b)=>b.date.localeCompare(a.date));
     return `<div class="card"><h2>Semua Transaksi</h2>
-      ${list.length?list.map(t=>`<div class="row">
-        <div class="left"><span class="t">${escapeHtml(t.category||'-')}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
+      ${list.length?list.map(t=>`<div class="row" style="align-items:flex-start;">
+        <div class="row-main">
+          <div class="left">
+            <span class="t">${escapeHtml(t.category||'-')}</span>
+            <span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span>
+          </div>
+          ${isAdmin?`<div class="row-actions">
+            <button class="btn ghost" data-edit-kas="${t.id}" type="button">✏️ Edit</button>
+            <button class="btn danger" data-del-kas="${t.id}" type="button">🗑️ Hapus</button>
+          </div>`:''}
+        </div>
         <div class="amt ${t.type==='masuk'?'in':'out'}">${t.type==='masuk'?'+':'-'}${rupiah(t.amount)}</div>
       </div>`).join(''):'<div class="empty">Belum ada transaksi.</div>'}</div>`;
   }
@@ -636,8 +659,19 @@
       </div>`).join('')}</div>
       <div class="card"><h2>Riwayat Setor/Tarik</h2>
       ${DATA.tabungan.length?[...DATA.tabungan].sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`
-        <div class="row"><div class="left"><span class="t">${escapeHtml(memberName(t.memberId))}</span><span class="s">${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span></div>
-        <div class="amt ${t.type==='setor'?'in':'out'}">${t.type==='setor'?'+':'-'}${rupiah(t.amount)}</div></div>`).join(''):'<div class="empty">Belum ada riwayat.</div>'}
+        <div class="row" style="align-items:flex-start;">
+          <div class="row-main">
+            <div class="left">
+              <span class="t">${escapeHtml(memberName(t.memberId))}</span>
+              <span class="s">${t.type==='setor'?'Setor':'Tarik'} · ${fmtDate(t.date)}${t.note?' · '+escapeHtml(t.note):''}</span>
+            </div>
+            ${isAdmin?`<div class="row-actions">
+              <button class="btn ghost" data-edit-tabungan="${t.id}" type="button">✏️ Edit</button>
+              <button class="btn danger" data-del-tabungan="${t.id}" type="button">🗑️ Hapus</button>
+            </div>`:''}
+          </div>
+          <div class="amt ${t.type==='setor'?'in':'out'}">${t.type==='setor'?'+':'-'}${rupiah(t.amount)}</div>
+        </div>`).join(''):'<div class="empty">Belum ada riwayat.</div>'}
       </div>`;
   }
 
@@ -647,19 +681,29 @@
     return `<div class="card">
       <h2>Pengaturan Arisan</h2>
       <div class="row"><div class="left"><span class="t">Iuran per giliran</span><span class="s">Per anggota, per putaran</span></div><div class="amt in">${rupiah(a.contribution)}</div></div>
-      ${isAdmin?`<button class="btn ghost small" id="btnEditContribution" style="margin-top:8px;">Ubah Iuran</button>
-      <button class="btn ghost small" id="btnEditOrder" style="margin-top:8px;margin-left:8px;">Atur Urutan (${a.order.length} orang)</button>`:''}
+      ${isAdmin?`<div class="action-row">
+        <button class="btn ghost small" id="btnEditContribution">✏️ Ubah Iuran</button>
+        <button class="btn ghost small" id="btnEditOrder">🔢 Atur Urutan (${a.order.length} orang)</button>
+      </div>`:''}
     </div>
     ${a.order.length===0?`<div class="card"><div class="empty">Belum ada urutan giliran arisan.</div></div>`:`<div class="card"><h2>Urutan Giliran</h2><div class="arisan-order">
       ${a.order.map((id,i)=>{const done=a.rounds.some(r=>r.memberId===id&&r.completed);return `<div class="stop ${done?'done':''}">
         <div class="num">#${i+1}</div><div class="nm">${escapeHtml(memberName(id))}</div><div class="st">${done?'✓ Selesai':'–'}</div></div>`}).join('')}
-      </div>${isAdmin?`<button class="btn gold block" id="btnStartRound" style="margin-top:6px;">Mulai Putaran Baru</button>`:''}</div>`}
+      </div>${isAdmin?`<button class="btn gold block" id="btnStartRound" style="margin-top:6px;">+ Mulai Putaran Baru</button>`:''}</div>`}
     <div class="card"><h2>Riwayat Putaran</h2>
       ${a.rounds.length?[...a.rounds].sort((x,y)=>y.roundNumber-x.roundNumber).map(r=>{
         const collected=arisanCollectedThisRound(r),target=a.contribution*a.order.length;
-        return `<div class="row" style="align-items:flex-start;${isAdmin?'cursor:pointer;':''}" ${isAdmin?`data-open-round="${r.id}"`:''}>
-          <div class="left"><span class="t">Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</span>
-          <span class="s">${fmtDate(r.date)} · ${r.completed?'<span class="pill">Selesai</span>':'<span class="pill due">Berjalan</span>'}</span></div>
+        return `<div class="row" style="align-items:flex-start;">
+          <div class="row-main">
+            <div class="left">
+              <span class="t">Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</span>
+              <span class="s">${fmtDate(r.date)} · ${r.completed?'<span class="pill">Selesai</span>':'<span class="pill due">Berjalan</span>'}</span>
+            </div>
+            ${isAdmin?`<div class="row-actions">
+              <button class="btn ghost" data-open-round="${r.id}" type="button">👁️ Detail / Edit</button>
+              <button class="btn danger" data-del-round="${r.id}" type="button">🗑️ Hapus</button>
+            </div>`:''}
+          </div>
           <div class="amt in">${rupiah(collected)}/${rupiah(target)}</div>
         </div>`}).join(''):'<div class="empty">Belum ada putaran arisan.</div>'}
     </div>`;
@@ -708,6 +752,54 @@
     });
   }
 
+  function sheetEditKas(id){
+    if(!isAdmin){alert('Hanya Admin yang dapat mengedit transaksi kas.');return;}
+    const t=DATA.kas.find(x=>x.id===id);
+    if(!t){alert('Transaksi tidak ditemukan.');return;}
+
+    openSheet(`<h3>Edit Transaksi Kas</h3>
+      <div class="seg" id="editKasTypeSeg">
+        <button type="button" class="${t.type==='masuk'?'on in':''}" data-val="masuk">Uang Masuk</button>
+        <button type="button" class="${t.type==='keluar'?'on out':''}" data-val="keluar">Uang Keluar</button>
+      </div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="editKasAmount" value="${Number(t.amount)||0}" inputmode="numeric"></div>
+      <div class="field"><label>Kategori</label><input type="text" id="editKasCategory" value="${escapeHtml(t.category||'')}"></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="editKasDate" value="${t.date||todayStr()}"></div>
+      <div class="field"><label>Catatan</label><input type="text" id="editKasNote" value="${escapeHtml(t.note||'')}"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelEditKas">Batal</button><button class="btn gold" id="saveEditKas">Simpan</button></div>`);
+
+    let type=t.type;
+    document.querySelectorAll('#editKasTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
+      type=b.dataset.val;
+      document.querySelectorAll('#editKasTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));
+      b.classList.add('on',type==='masuk'?'in':'out');
+    }));
+    document.getElementById('cancelEditKas').addEventListener('click',closeSheet);
+    document.getElementById('saveEditKas').addEventListener('click',async()=>{
+      const amount=Number(document.getElementById('editKasAmount').value);
+      if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
+      t.type=type;
+      t.amount=amount;
+      t.category=document.getElementById('editKasCategory').value.trim()||(type==='masuk'?'Pemasukan':'Pengeluaran');
+      t.date=document.getElementById('editKasDate').value||todayStr();
+      t.note=document.getElementById('editKasNote').value.trim();
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  async function deleteKas(id){
+    if(!isAdmin){alert('Hanya Admin yang dapat menghapus transaksi kas.');return;}
+    const idx=DATA.kas.findIndex(x=>x.id===id);
+    if(idx<0){alert('Transaksi tidak ditemukan.');return;}
+    const t=DATA.kas[idx];
+    if(!confirm(`Hapus transaksi "${t.category||'Transaksi'}" sebesar ${rupiah(t.amount)}?`))return;
+    const backup=DATA.kas[idx];
+    DATA.kas.splice(idx,1);
+    if(!(await saveData())) DATA.kas.splice(idx,0,backup);
+    else render();
+  }
+
+
   function sheetAddTabungan(){
     if(!isAdmin)return;
     if(DATA.members.length===0){alert('Tambahkan anggota keluarga dulu.');return;}
@@ -730,6 +822,55 @@
       if(await saveData()){closeSheet();render();}
     });
   }
+
+  function sheetEditTabungan(id){
+    if(!isAdmin){alert('Hanya Admin yang dapat mengedit tabungan.');return;}
+    const t=DATA.tabungan.find(x=>x.id===id);
+    if(!t){alert('Riwayat tabungan tidak ditemukan.');return;}
+    if(DATA.members.length===0){alert('Belum ada anggota.');return;}
+
+    openSheet(`<h3>Edit Setor / Tarik Tabungan</h3>
+      <div class="field"><label>Anggota</label><select id="editTbMember">${DATA.members.map(m=>`<option value="${m.id}" ${m.id===t.memberId?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="seg" id="editTbTypeSeg">
+        <button type="button" class="${t.type==='setor'?'on in':''}" data-val="setor">Setor</button>
+        <button type="button" class="${t.type==='tarik'?'on out':''}" data-val="tarik">Tarik</button>
+      </div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="editTbAmount" value="${Number(t.amount)||0}" inputmode="numeric"></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="editTbDate" value="${t.date||todayStr()}"></div>
+      <div class="field"><label>Catatan</label><input type="text" id="editTbNote" value="${escapeHtml(t.note||'')}"></div>
+      <div class="sheet-actions"><button class="btn ghost" id="cancelEditTb">Batal</button><button class="btn gold" id="saveEditTb">Simpan</button></div>`);
+
+    let type=t.type;
+    document.querySelectorAll('#editTbTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
+      type=b.dataset.val;
+      document.querySelectorAll('#editTbTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));
+      b.classList.add('on',type==='setor'?'in':'out');
+    }));
+    document.getElementById('cancelEditTb').addEventListener('click',closeSheet);
+    document.getElementById('saveEditTb').addEventListener('click',async()=>{
+      const amount=Number(document.getElementById('editTbAmount').value);
+      if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
+      t.memberId=document.getElementById('editTbMember').value;
+      t.type=type;
+      t.amount=amount;
+      t.date=document.getElementById('editTbDate').value||todayStr();
+      t.note=document.getElementById('editTbNote').value.trim();
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  async function deleteTabungan(id){
+    if(!isAdmin){alert('Hanya Admin yang dapat menghapus riwayat tabungan.');return;}
+    const idx=DATA.tabungan.findIndex(x=>x.id===id);
+    if(idx<0){alert('Riwayat tabungan tidak ditemukan.');return;}
+    const t=DATA.tabungan[idx];
+    if(!confirm(`Hapus transaksi ${t.type==='setor'?'setoran':'penarikan'} ${rupiah(t.amount)} milik ${memberName(t.memberId)}?`))return;
+    const backup=DATA.tabungan[idx];
+    DATA.tabungan.splice(idx,1);
+    if(!(await saveData())) DATA.tabungan.splice(idx,0,backup);
+    else render();
+  }
+
 
   function sheetAddMember(){
     if(!isAdmin)return;
@@ -789,14 +930,71 @@
 
   function sheetOpenRound(roundId){
     if(!isAdmin)return;
-    const r=DATA.arisan.rounds.find(x=>x.id===roundId);if(!r)return;
-    openSheet(`<h3>Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</h3><p style="font-size:12.5px;color:var(--muted);">Tandai anggota yang sudah membayar.</p>
-      <div id="paymentsList">${DATA.arisan.order.map(id=>`<div class="pay-chip"><span>${escapeHtml(memberName(id))}</span><button class="toggle ${r.payments[id]?'on':''}" data-toggle-pay="${id}"><span class="dot"></span></button></div>`).join('')}</div>
-      <div class="sheet-actions">${r.completed?'':`<button class="btn gold block" id="markComplete">Tandai Selesai</button>`}</div>`);
-    document.querySelectorAll('[data-toggle-pay]').forEach(btn=>btn.addEventListener('click',async()=>{
-      const id=btn.dataset.togglePay;r.payments[id]=!r.payments[id];btn.classList.toggle('on',r.payments[id]);await saveData();
+    const r=DATA.arisan.rounds.find(x=>x.id===roundId);
+    if(!r)return;
+
+    openSheet(`<h3>Putaran #${r.roundNumber} · ${escapeHtml(memberName(r.memberId))}</h3>
+      <div class="field">
+        <label>Penerima Arisan</label>
+        <select id="roundMember">
+          ${DATA.arisan.order.map(id=>`<option value="${id}" ${id===r.memberId?'selected':''}>${escapeHtml(memberName(id))}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Tanggal Putaran</label>
+        <input type="date" id="roundDate" value="${r.date||todayStr()}">
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">Tandai anggota yang sudah membayar iuran.</p>
+      <div id="paymentsList">
+        ${DATA.arisan.order.map(id=>`<div class="pay-chip">
+          <span>${escapeHtml(memberName(id))}</span>
+          <button class="toggle ${r.payments[id]?'on':''}" data-toggle-pay="${id}" type="button"><span class="dot"></span></button>
+        </div>`).join('')}
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="saveRound">Simpan Perubahan</button>
+        ${r.completed?'':`<button class="btn gold" id="markComplete">Tandai Selesai</button>`}
+      </div>
+      ${r.completed?'<div class="shared-note">Putaran ini sudah selesai. Masih dapat diedit oleh Admin.</div>':''}`);
+
+    document.querySelectorAll('[data-toggle-pay]').forEach(btn=>btn.addEventListener('click',()=>{
+      const id=btn.dataset.togglePay;
+      r.payments[id]=!r.payments[id];
+      btn.classList.toggle('on',r.payments[id]);
     }));
-    document.getElementById('markComplete')?.addEventListener('click',async()=>{r.completed=true;if(await saveData()){closeSheet();render();}});
+
+    document.getElementById('saveRound').addEventListener('click',async()=>{
+      r.memberId=document.getElementById('roundMember').value;
+      r.date=document.getElementById('roundDate').value||todayStr();
+      if(await saveData()){closeSheet();render();}
+    });
+
+    document.getElementById('markComplete')?.addEventListener('click',async()=>{
+      r.completed=true;
+      if(await saveData()){closeSheet();render();}
+    });
+  }
+
+  async function deleteArisanRound(id){
+    if(!isAdmin){alert('Hanya Admin yang dapat menghapus putaran arisan.');return;}
+    const idx=DATA.arisan.rounds.findIndex(r=>r.id===id);
+    if(idx<0){alert('Putaran tidak ditemukan.');return;}
+    const r=DATA.arisan.rounds[idx];
+    if(!confirm(`Hapus Putaran #${r.roundNumber} (${memberName(r.memberId)}) beserta catatan pembayarannya?`))return;
+
+    const backup=DATA.arisan.rounds[idx];
+    DATA.arisan.rounds.splice(idx,1);
+
+    // Renumber remaining rounds so the history stays clean.
+    DATA.arisan.rounds
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)) || Number(a.roundNumber)-Number(b.roundNumber))
+      .forEach((round,i)=>round.roundNumber=i+1);
+
+    if(!(await saveData())){
+      DATA.arisan.rounds.splice(idx,0,backup);
+      return;
+    }
+    render();
   }
 
   // ================= EVENTS =================
@@ -806,13 +1004,21 @@
     document.getElementById('btnEditOrder')?.addEventListener('click',sheetEditOrder);
     document.getElementById('btnStartRound')?.addEventListener('click',startNewRound);
 
+    document.querySelectorAll('[data-edit-kas]').forEach(btn=>btn.addEventListener('click',()=>sheetEditKas(btn.dataset.editKas)));
+    document.querySelectorAll('[data-del-kas]').forEach(btn=>btn.addEventListener('click',()=>deleteKas(btn.dataset.delKas)));
+
+    document.querySelectorAll('[data-edit-tabungan]').forEach(btn=>btn.addEventListener('click',()=>sheetEditTabungan(btn.dataset.editTabungan)));
+    document.querySelectorAll('[data-del-tabungan]').forEach(btn=>btn.addEventListener('click',()=>deleteTabungan(btn.dataset.delTabungan)));
+
     document.querySelectorAll('[data-del-member]').forEach(btn=>btn.addEventListener('click',async()=>{
       if(!isAdmin)return;
       if(!confirm('Hapus anggota ini? Riwayat terkait tetap tersimpan.'))return;
       DATA.members=DATA.members.filter(m=>m.id!==btn.dataset.delMember);
       if(await saveData())render();
     }));
+
     document.querySelectorAll('[data-open-round]').forEach(el=>el.addEventListener('click',()=>sheetOpenRound(el.dataset.openRound)));
+    document.querySelectorAll('[data-del-round]').forEach(btn=>btn.addEventListener('click',()=>deleteArisanRound(btn.dataset.delRound)));
   }
 
   document.querySelectorAll('nav.tabbar button').forEach(btn=>btn.addEventListener('click',()=>{
