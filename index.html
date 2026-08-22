@@ -353,11 +353,12 @@
 
   // ---------- DATA SUPABASE ----------
   async function loadData(){
-    const {data,error}=await supabaseClient
-      .from('app_data')
-      .select('data')
-      .eq('id',APP_DATA_ID)
-      .maybeSingle();
+    const { data: adminStatus, error: adminError } =
+  await supabaseClient.rpc('is_current_user_admin');
+
+if (!adminError && adminStatus === true) {
+  isAdmin = true;
+}
 
     if(error){
       console.error('Supabase load error:',error);
