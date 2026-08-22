@@ -285,6 +285,38 @@
     return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // ---------- FORMAT NOMINAL ----------
+  function formatNominal(value){
+    const digits=String(value??'').replace(/\\D/g,'');
+    if(!digits)return '';
+    return Number(digits).toLocaleString('id-ID');
+  }
+
+  function parseNominal(value){
+    const digits=String(value??'').replace(/\\D/g,'');
+    return Number(digits)||0;
+  }
+
+  function bindNominalInput(id){
+    const input=document.getElementById(id);
+    if(!input)return;
+    input.type='text';
+    input.inputMode='numeric';
+    input.addEventListener('input',()=>{
+      const start=input.selectionStart;
+      const before=String(input.value).slice(0,start);
+      const digitCount=(before.match(/\\d/g)||[]).length;
+      input.value=formatNominal(input.value);
+      let pos=0,count=0;
+      while(pos<input.value.length && count<digitCount){
+        if(/\\d/.test(input.value[pos]))count++;
+        pos++;
+      }
+      input.setSelectionRange(pos,pos);
+    });
+    input.value=formatNominal(input.value);
+  }
+
   function defaultData(){
     return {members:[],kas:[],tabungan:[],arisan:{contribution:0,order:[],rounds:[]}};
   }
@@ -750,7 +782,7 @@
     if(!isAdmin)return;
     openSheet(`<h3>Tambah Transaksi Kas</h3>
       <div class="seg" id="kasTypeSeg"><button type="button" class="on in" data-val="masuk">Uang Masuk</button><button type="button" data-val="keluar">Uang Keluar</button></div>
-      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="kasAmount" inputmode="numeric"></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="text" id="kasAmount" inputmode="numeric" placeholder="5.000.000"></div>
       <div class="field"><label>Kategori</label><input type="text" id="kasCategory" placeholder="mis. Iuran"></div>
       <div class="field"><label>Tanggal</label><input type="date" id="kasDate" value="${todayStr()}"></div>
       <div class="field"><label>Catatan</label><input type="text" id="kasNote"></div>
@@ -760,8 +792,9 @@
       kasType=b.dataset.val;document.querySelectorAll('#kasTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));b.classList.add('on',kasType==='masuk'?'in':'out');
     }));
     document.getElementById('cancelKas').addEventListener('click',closeSheet);
+    bindNominalInput('kasAmount');
     document.getElementById('saveKas').addEventListener('click',async()=>{
-      const amount=Number(document.getElementById('kasAmount').value);
+      const amount=parseNominal(document.getElementById('kasAmount').value);
       if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
       DATA.kas.push({id:uid(),type:kasType,amount,category:document.getElementById('kasCategory').value.trim()||(kasType==='masuk'?'Pemasukan':'Pengeluaran'),date:document.getElementById('kasDate').value||todayStr(),note:document.getElementById('kasNote').value.trim()});
       if(await saveData()){closeSheet();render();}
@@ -778,7 +811,7 @@
         <button type="button" class="${t.type==='masuk'?'on in':''}" data-val="masuk">Uang Masuk</button>
         <button type="button" class="${t.type==='keluar'?'on out':''}" data-val="keluar">Uang Keluar</button>
       </div>
-      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="editKasAmount" value="${Number(t.amount)||0}" inputmode="numeric"></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="text" id="editKasAmount" value="${formatNominal(t.amount)}" inputmode="numeric"></div>
       <div class="field"><label>Kategori</label><input type="text" id="editKasCategory" value="${escapeHtml(t.category||'')}"></div>
       <div class="field"><label>Tanggal</label><input type="date" id="editKasDate" value="${t.date||todayStr()}"></div>
       <div class="field"><label>Catatan</label><input type="text" id="editKasNote" value="${escapeHtml(t.note||'')}"></div>
@@ -791,8 +824,9 @@
       b.classList.add('on',type==='masuk'?'in':'out');
     }));
     document.getElementById('cancelEditKas').addEventListener('click',closeSheet);
+    bindNominalInput('editKasAmount');
     document.getElementById('saveEditKas').addEventListener('click',async()=>{
-      const amount=Number(document.getElementById('editKasAmount').value);
+      const amount=parseNominal(document.getElementById('editKasAmount').value);
       if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
       t.type=type;
       t.amount=amount;
@@ -822,7 +856,7 @@
     openSheet(`<h3>Tambah Setor / Tarik Tabungan</h3>
       <div class="field"><label>Anggota</label><select id="tbMember">${DATA.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
       <div class="seg" id="tbTypeSeg"><button type="button" class="on in" data-val="setor">Setor</button><button type="button" data-val="tarik">Tarik</button></div>
-      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="tbAmount"></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="text" id="tbAmount" inputmode="numeric" placeholder="5.000.000"></div>
       <div class="field"><label>Tanggal</label><input type="date" id="tbDate" value="${todayStr()}"></div>
       <div class="field"><label>Catatan</label><input type="text" id="tbNote"></div>
       <div class="sheet-actions"><button class="btn ghost" id="cancelTb">Batal</button><button class="btn gold" id="saveTb">Simpan</button></div>`);
@@ -831,8 +865,9 @@
       tbType=b.dataset.val;document.querySelectorAll('#tbTypeSeg button').forEach(x=>x.classList.remove('on','in','out'));b.classList.add('on',tbType==='setor'?'in':'out');
     }));
     document.getElementById('cancelTb').addEventListener('click',closeSheet);
+    bindNominalInput('tbAmount');
     document.getElementById('saveTb').addEventListener('click',async()=>{
-      const amount=Number(document.getElementById('tbAmount').value);
+      const amount=parseNominal(document.getElementById('tbAmount').value);
       if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
       DATA.tabungan.push({id:uid(),memberId:document.getElementById('tbMember').value,type:tbType,amount,date:document.getElementById('tbDate').value||todayStr(),note:document.getElementById('tbNote').value.trim()});
       if(await saveData()){closeSheet();render();}
@@ -851,7 +886,7 @@
         <button type="button" class="${t.type==='setor'?'on in':''}" data-val="setor">Setor</button>
         <button type="button" class="${t.type==='tarik'?'on out':''}" data-val="tarik">Tarik</button>
       </div>
-      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="number" id="editTbAmount" value="${Number(t.amount)||0}" inputmode="numeric"></div>
+      <div class="field" style="margin-top:12px;"><label>Jumlah (Rp)</label><input type="text" id="editTbAmount" value="${formatNominal(t.amount)}" inputmode="numeric"></div>
       <div class="field"><label>Tanggal</label><input type="date" id="editTbDate" value="${t.date||todayStr()}"></div>
       <div class="field"><label>Catatan</label><input type="text" id="editTbNote" value="${escapeHtml(t.note||'')}"></div>
       <div class="sheet-actions"><button class="btn ghost" id="cancelEditTb">Batal</button><button class="btn gold" id="saveEditTb">Simpan</button></div>`);
@@ -863,8 +898,9 @@
       b.classList.add('on',type==='setor'?'in':'out');
     }));
     document.getElementById('cancelEditTb').addEventListener('click',closeSheet);
+    bindNominalInput('editTbAmount');
     document.getElementById('saveEditTb').addEventListener('click',async()=>{
-      const amount=Number(document.getElementById('editTbAmount').value);
+      const amount=parseNominal(document.getElementById('editTbAmount').value);
       if(!amount||amount<=0){alert('Isi jumlah yang valid');return;}
       t.memberId=document.getElementById('editTbMember').value;
       t.type=type;
@@ -928,11 +964,12 @@
 
   function sheetEditContribution(){
     if(!isAdmin)return;
-    openSheet(`<h3>Ubah Iuran Arisan</h3><div class="field"><label>Iuran per anggota per putaran (Rp)</label><input type="number" id="contribAmount" value="${DATA.arisan.contribution||''}"></div>
+    openSheet(`<h3>Ubah Iuran Arisan</h3><div class="field"><label>Iuran per anggota per putaran (Rp)</label><input type="text" id="contribAmount" value="${formatNominal(DATA.arisan.contribution||'')}" inputmode="numeric"></div>
       <div class="sheet-actions"><button class="btn ghost" id="cancelContrib">Batal</button><button class="btn gold" id="saveContrib">Simpan</button></div>`);
     document.getElementById('cancelContrib').addEventListener('click',closeSheet);
+    bindNominalInput('contribAmount');
     document.getElementById('saveContrib').addEventListener('click',async()=>{
-      DATA.arisan.contribution=Math.max(0,Number(document.getElementById('contribAmount').value)||0);
+      DATA.arisan.contribution=Math.max(0,parseNominal(document.getElementById('contribAmount').value));
       if(await saveData()){closeSheet();render();}
     });
   }
