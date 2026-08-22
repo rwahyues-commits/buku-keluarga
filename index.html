@@ -273,105 +273,224 @@
 
   // ---------- AUTH ----------
   async function refreshAuth(){
-    const {data:{session:s}} = await supabaseClient.auth.getSession();
-    session = s;
-    isAdmin = false;
+    try{
+      const {data:{session:s}, error:sessionError} =
+        await supabaseClient.auth.getSession();
 
-    if(session?.user){
-  const {data:adminStatus,error} = await supabaseClient
-    .rpc('is_current_user_admin');
+      if(sessionError) throw sessionError;
 
-  if(!error && adminStatus === true) {
-    isAdmin = true;
+      session = s || null;
+      isAdmin = false;
+
+      if(session?.user){
+        // Primary method: RPC created in Supabase.
+        const {data:rpcAdmin, error:rpcError} =
+          await supabaseClient.rpc('is_current_user_admin');
+
+        console.log('Admin RPC:', rpcAdmin, rpcError);
+
+        if(!rpcError && rpcAdmin === true){
+          isAdmin = true;
+        }else{
+          // Fallback: read the current user's profile directly.
+          // This makes the client resilient if the RPC is missing,
+          // returns an error, or has a different return type.
+          const {data:profile, error:profileError} =
+            await supabaseClient
+              .from('profiles')
+              .select('is_admin')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+          console.log('Admin profile:', profile, profileError);
+
+          if(!profileError && profile?.is_admin === true){
+            isAdmin = true;
+          }
+        }
+      }
+
+      updateAuthUI();
+      return true;
+
+    }catch(err){
+      console.error('refreshAuth error:', err);
+      session = null;
+      isAdmin = false;
+      updateAuthUI();
+      return false;
+    }
   }
-}
 
   function updateAuthUI(){
-    const box = document.getElementById('authBox');
+    const box=document.getElementById('authBox');
     if(!box) return;
 
     if(session?.user){
       box.innerHTML = isAdmin
-        ? `<span>🔐 <b>Admin aktif</b></span><button class="btn ghost small" id="logoutBtn">Keluar Admin</button>`
-        : `<span>👤 ${escapeHtml(session.user.email||'Pengguna')}</span><button class="btn ghost small" id="logoutBtn">Keluar</button>`;
-      document.getElementById('logoutBtn')?.addEventListener('click', logout);
+        ? `<span>🔐 <b>Admin aktif</b></span>
+           <button class="btn ghost small" id="logoutBtn">Keluar Admin</button>`
+        : `<span>👤 ${escapeHtml(session.user.email||'Pengguna')}</span>
+           <button class="btn ghost small" id="logoutBtn">Keluar</button>`;
+
+      document.getElementById('logoutBtn')?.addEventListener('click',logout);
     }else{
-      box.innerHTML = `<span style="color:var(--muted);font-size:13px;">Mode lihat</span><button class="btn ghost small" id="loginBtn">🔐 Login Admin</button>`;
-      document.getElementById('loginBtn')?.addEventListener('click', sheetLogin);
+      box.innerHTML =
+        `<span style="color:var(--muted);font-size:13px;">Mode lihat</span>
+         <button class="btn ghost small" id="loginBtn">🔐 Login Admin</button>`;
+
+      document.getElementById('loginBtn')?.addEventListener('click',sheetLogin);
     }
 
     const fab=document.getElementById('fab');
-    if(fab) fab.style.display = isAdmin ? 'flex' : 'none';
-    render();
+    if(fab) fab.style.display=isAdmin?'flex':'none';
+
+    if(DATA) render();
   }
 
   async function logout(){
-    await supabaseClient.auth.signOut();
-    session=null;
-    isAdmin=false;
-    updateAuthUI();
-    alert('Berhasil keluar dari Admin.');
+    try{
+      const {error}=await supabaseClient.auth.signOut();
+      if(error) console.error('Logout error:',error);
+    }finally{
+      session=null;
+      isAdmin=false;
+      updateAuthUI();
+      alert('Berhasil keluar dari Admin.');
+    }
   }
 
   function sheetLogin(){
     openSheet(`
       <h3>Login Admin</h3>
-      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="admin@gmail.com" autocomplete="email"></div>
-      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password"></div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail"
+               placeholder="admin@gmail.com"
+               autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="loginPassword"
+               placeholder="Password"
+               autocomplete="current-password">
+      </div>
       <div class="sheet-actions">
         <button class="btn ghost" id="cancelLogin">Batal</button>
         <button class="btn gold" id="doLogin">Login</button>
       </div>
-      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">Gunakan akun yang sudah dibuat di Supabase Authentication.</p>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
+        Gunakan akun yang sudah dibuat di Supabase Authentication.
+      </p>
     `);
-    document.getElementById('cancelLogin').addEventListener('click',closeSheet);
-    document.getElementById('doLogin').addEventListener('click',async()=>{
-      const email=document.getElementById('loginEmail').value.trim();
-      const password=document.getElementById('loginPassword').value;
-      if(!email||!password){alert('Email dan password wajib diisi.');return;}
+
+    document.getElementById('cancelLogin')?.addEventListener('click',closeSheet);
+
+    document.getElementById('doLogin')?.addEventListener('click',async()=>{
+      const email=document.getElementById('loginEmail')?.value.trim();
+      const password=document.getElementById('loginPassword')?.value;
       const btn=document.getElementById('doLogin');
-      btn.disabled=true; btn.textContent='Memproses...';
 
-      const {error}=await supabaseClient.auth.signInWithPassword({email,password});
-      if(error){
-        btn.disabled=false; btn.textContent='Login';
-        alert('Login gagal: '+error.message);
+      if(!email||!password){
+        alert('Email dan password wajib diisi.');
         return;
       }
 
-      await refreshAuth();
-      if(!isAdmin){
-        await supabaseClient.auth.signOut();
-        session=null; isAdmin=false; updateAuthUI();
-        alert('Akun berhasil login, tetapi belum memiliki hak Admin.');
-        return;
+      btn.disabled=true;
+      btn.textContent='Memproses...';
+
+      try{
+        const {data,error}=await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if(error) throw error;
+
+        // Use the returned session immediately instead of waiting for
+        // the auth event to update the UI.
+        session=data?.session || null;
+
+        await refreshAuth();
+
+        if(!isAdmin){
+          await supabaseClient.auth.signOut();
+          session=null;
+          isAdmin=false;
+          updateAuthUI();
+
+          alert('Akun berhasil login, tetapi belum memiliki hak Admin. Periksa profiles.is_admin untuk UID akun ini.');
+          return;
+        }
+
+        closeSheet();
+        await loadData();
+        render();
+        alert('Login Admin berhasil.');
+
+      }catch(err){
+        console.error('Login error:',err);
+        alert('Login gagal: '+(err?.message || 'Kesalahan tidak diketahui.'));
+      }finally{
+        if(btn){
+          btn.disabled=false;
+          btn.textContent='Login';
+        }
       }
-      closeSheet();
-      alert('Login Admin berhasil.');
     });
   }
 
   // ---------- DATA SUPABASE ----------
   async function loadData(){
-    const { data: adminStatus, error: adminError } =
-  await supabaseClient.rpc('is_current_user_admin');
+    const main=document.getElementById('main');
 
-if (!adminError && adminStatus === true) {
-  isAdmin = true;
-}
-
-    if(error){
-      console.error('Supabase load error:',error);
-      DATA=defaultData();
-      showDataError('Data Supabase belum bisa dibaca. Pastikan tabel app_data dan policy SELECT sudah dibuat.');
-      return;
+    if(main){
+      main.innerHTML='<div class="loading">Memuat data…</div>';
     }
 
-    DATA = data?.data ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data) : defaultData();
-    if(!DATA.members) DATA.members=[];
-    if(!DATA.kas) DATA.kas=[];
-    if(!DATA.tabungan) DATA.tabungan=[];
-    if(!DATA.arisan) DATA.arisan={contribution:0,order:[],rounds:[]};
+    try{
+      const {data,error}=await supabaseClient
+        .from('app_data')
+        .select('data')
+        .eq('id',APP_DATA_ID)
+        .maybeSingle();
+
+      if(error) throw error;
+
+      DATA = data?.data
+        ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data)
+        : defaultData();
+
+      if(!DATA || typeof DATA!=='object'){
+        DATA=defaultData();
+      }
+
+      if(!Array.isArray(DATA.members)) DATA.members=[];
+      if(!Array.isArray(DATA.kas)) DATA.kas=[];
+      if(!Array.isArray(DATA.tabungan)) DATA.tabungan=[];
+
+      if(!DATA.arisan || typeof DATA.arisan!=='object'){
+        DATA.arisan={contribution:0,order:[],rounds:[]};
+      }
+
+      if(!Array.isArray(DATA.arisan.order)) DATA.arisan.order=[];
+      if(!Array.isArray(DATA.arisan.rounds)) DATA.arisan.rounds=[];
+      DATA.arisan.contribution=Number(DATA.arisan.contribution)||0;
+
+      return true;
+
+    }catch(err){
+      console.error('Supabase load error:',err);
+
+      DATA=defaultData();
+
+      showDataError(
+        'Data belum dapat dimuat dari Supabase. '+
+        (err?.message || 'Periksa tabel app_data dan policy SELECT.')
+      );
+
+      return false;
+    }
   }
 
   async function saveData(){
@@ -380,21 +499,45 @@ if (!adminError && adminStatus === true) {
       return false;
     }
 
-    const {error}=await supabaseClient
-      .from('app_data')
-      .upsert({id:APP_DATA_ID,data:DATA,updated_at:new Date().toISOString()},{onConflict:'id'});
+    try{
+      const {error}=await supabaseClient
+        .from('app_data')
+        .upsert(
+          {
+            id:APP_DATA_ID,
+            data:DATA,
+            updated_at:new Date().toISOString()
+          },
+          {onConflict:'id'}
+        );
 
-    if(error){
-      console.error('Supabase save error:',error);
-      alert('Data gagal disimpan ke Supabase: '+error.message);
+      if(error) throw error;
+
+      return true;
+
+    }catch(err){
+      console.error('Supabase save error:',err);
+      alert('Data gagal disimpan ke Supabase: '+(err?.message || 'Kesalahan tidak diketahui.'));
       return false;
     }
-    return true;
   }
 
   function showDataError(msg){
     const main=document.getElementById('main');
-    if(main) main.innerHTML=`<div class="card"><div class="empty">${escapeHtml(msg)}</div></div>`;
+    if(main){
+      main.innerHTML=`
+        <div class="card">
+          <h2>Koneksi Data</h2>
+          <div class="empty">${escapeHtml(msg)}</div>
+          <button class="btn gold block" id="retryData" style="margin-top:10px;">
+            Coba Lagi
+          </button>
+        </div>`;
+      document.getElementById('retryData')?.addEventListener('click',async()=>{
+        await loadData();
+        render();
+      });
+    }
   }
 
   // ---------- KAS ----------
@@ -687,13 +830,41 @@ if (!adminError && adminStatus === true) {
   // ================= INIT =================
   (async function init(){
     const main=document.getElementById('main');
-    main.innerHTML='<div class="loading">Menghubungkan ke Supabase…</div>';
 
-    await refreshAuth();
-    await loadData();
-    render();
+    try{
+      if(main){
+        main.innerHTML='<div class="loading">Menghubungkan ke Supabase…</div>';
+      }
 
-    supabaseClient.auth.onAuthStateChange(async()=>{await refreshAuth();});
+      await refreshAuth();
+      await loadData();
+      render();
+
+      // Do not await Supabase queries directly inside the auth callback.
+      // A small timeout prevents event/callback races with getSession().
+      supabaseClient.auth.onAuthStateChange(()=>{
+        setTimeout(async()=>{
+          await refreshAuth();
+          if(!DATA) await loadData();
+          render();
+        },0);
+      });
+
+    }catch(err){
+      console.error('Initialization error:',err);
+      DATA=defaultData();
+
+      if(main){
+        main.innerHTML=`
+          <div class="card">
+            <h2>Gagal Memulai Aplikasi</h2>
+            <div class="empty">${escapeHtml(err?.message || 'Terjadi kesalahan saat memulai aplikasi.')}</div>
+            <button class="btn gold block" style="margin-top:10px;" onclick="location.reload()">
+              Muat Ulang
+            </button>
+          </div>`;
+      }
+    }
   })();
 
 </script>
