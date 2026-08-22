@@ -200,6 +200,15 @@
 
   .loading{display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--muted);font-size:13px;}
   .shared-note{font-size:11.5px;color:var(--muted);text-align:center;margin:4px 0 14px;}
+  .sync-status{
+    font-size:11px;color:var(--muted);text-align:center;margin:-4px 0 12px;
+  }
+  .member-readonly{
+    display:flex;align-items:center;gap:8px;
+    background:var(--green-light);border:1px solid var(--paper-line);
+    color:var(--green);border-radius:10px;padding:9px 11px;
+    font-size:12px;margin-bottom:12px;
+  }
 
   .arisan-order{display:flex;overflow-x:auto;gap:10px;padding:4px 2px 10px;}
   .arisan-order .stop{
@@ -291,12 +300,21 @@
   const SUPABASE_URL = 'https://ouhvoggkffpgywldjywk.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable__BvfW_8qaolHCuu9yJgtVQ_kLozf14v';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  /*
+    ATURAN AKSES:
+    - Anggota/login biasa: SELECT app_data saja (read-only).
+    - Admin: SELECT + INSERT/UPDATE/DELETE.
+    Jangan berikan INSERT/UPDATE/DELETE kepada role anggota.
+  */
 
   const APP_DATA_ID = 1;
   let DATA = null;
   let currentTab = 'ringkasan';
   let session = null;
   let isAdmin = false;
+  let lastDataUpdate = null;
+  let memberSyncTimer = null;
+  let isLoadingRemote = false;
 
   function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
   function rupiah(n){ n=Number(n)||0; return 'Rp'+n.toLocaleString('id-ID'); }
@@ -304,6 +322,10 @@
   function fmtDate(d){
     try{return new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}
     catch(e){return d;}
+  }
+  function fmtDateTime(d){
+    try{return new Date(d).toLocaleString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+    catch(e){return d || '';}
   }
   function initials(name){
     return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -452,6 +474,8 @@
     }finally{
       session=null;
       isAdmin=false;
+      if(memberSyncTimer) clearInterval(memberSyncTimer);
+      memberSyncTimer=null;
       updateAuthUI();
       alert('Berhasil keluar dari Admin.');
     }
@@ -548,7 +572,7 @@
     try{
       const {data,error}=await supabaseClient
         .from('app_data')
-        .select('data')
+        .select('data,updated_at')
         .eq('id',APP_DATA_ID)
         .maybeSingle();
 
@@ -557,6 +581,8 @@
       DATA = data?.data
         ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data)
         : defaultData();
+
+      lastDataUpdate = data?.updated_at || new Date().toISOString();
 
       if(!DATA || typeof DATA!=='object'){
         DATA=defaultData();
@@ -610,6 +636,7 @@
 
       if(error) throw error;
 
+      lastDataUpdate = new Date().toISOString();
       return true;
 
     }catch(err){
@@ -667,7 +694,15 @@
   function render(){
     if(!DATA) return;
     const main=document.getElementById('main');
-    if(currentTab==='ringkasan') main.innerHTML=renderRingkasan();
+    const readonlyNotice = !isAdmin
+      ? `<div class="member-readonly">👁️ <span><b>Mode Anggota:</b> hanya melihat data. Perubahan dari Admin akan diperbarui otomatis.</span></div>
+         <div class="sync-status" id="syncStatus">Sinkronisasi online aktif${lastDataUpdate ? ' · '+fmtDateTime(lastDataUpdate) : ''}</div>`
+      : '';
+    if(currentTab==='ringkasan') main.innerHTML=readonlyNotice+renderRingkasan();
+    else if(currentTab==='kas') main.innerHTML=readonlyNotice+renderKas();
+    else if(currentTab==='tabungan') main.innerHTML=readonlyNotice+renderTabungan();
+    else if(currentTab==='arisan') main.innerHTML=readonlyNotice+renderArisan();
+    else if(currentTab==='anggota') main.innerHTML=readonlyNotice+renderAnggota();
     else if(currentTab==='kas') main.innerHTML=renderKas();
     else if(currentTab==='tabungan') main.innerHTML=renderTabungan();
     else if(currentTab==='arisan') main.innerHTML=renderArisan();
@@ -1121,6 +1156,54 @@
     render();
   }
 
+  // ================= SINKRONISASI ANGGOTA =================
+  // Anggota hanya membaca data. Polling ringan memastikan perubahan Admin
+  // terlihat otomatis tanpa anggota harus refresh halaman.
+  async function syncMemberData(){
+    if(isAdmin || !session?.user || isLoadingRemote) return;
+    isLoadingRemote = true;
+    try{
+      const {data,error}=await supabaseClient
+        .from('app_data')
+        .select('data,updated_at')
+        .eq('id',APP_DATA_ID)
+        .maybeSingle();
+
+      if(error) throw error;
+      const remoteStamp = data?.updated_at || null;
+
+      if(remoteStamp && remoteStamp !== lastDataUpdate){
+        DATA = data?.data
+          ? (typeof data.data==='string' ? JSON.parse(data.data) : data.data)
+          : defaultData();
+
+        if(!DATA || typeof DATA!=='object') DATA=defaultData();
+        if(!Array.isArray(DATA.members)) DATA.members=[];
+        if(!Array.isArray(DATA.kas)) DATA.kas=[];
+        if(!Array.isArray(DATA.tabungan)) DATA.tabungan=[];
+        if(!DATA.arisan || typeof DATA.arisan!=='object')
+          DATA.arisan={contribution:0,order:[],rounds:[]};
+        if(!Array.isArray(DATA.arisan.order)) DATA.arisan.order=[];
+        if(!Array.isArray(DATA.arisan.rounds)) DATA.arisan.rounds=[];
+        DATA.arisan.contribution=Number(DATA.arisan.contribution)||0;
+        lastDataUpdate=remoteStamp;
+        render();
+      }
+    }catch(err){
+      console.warn('Sinkronisasi anggota gagal:',err);
+    }finally{
+      isLoadingRemote=false;
+    }
+  }
+
+  function startMemberSync(){
+    if(memberSyncTimer) clearInterval(memberSyncTimer);
+    memberSyncTimer=null;
+    if(!isAdmin && session?.user){
+      memberSyncTimer=setInterval(syncMemberData,5000);
+    }
+  }
+
   // ================= EVENTS =================
   function attachHandlers(){
     document.getElementById('btnAddMember')?.addEventListener('click',sheetAddMember);
@@ -1171,6 +1254,7 @@
       await refreshAuth();
       await loadData();
       render();
+      startMemberSync();
 
       // Do not await Supabase queries directly inside the auth callback.
       // A small timeout prevents event/callback races with getSession().
@@ -1179,6 +1263,7 @@
           await refreshAuth();
           if(!DATA) await loadData();
           render();
+          startMemberSync();
         },0);
       });
 
