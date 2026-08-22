@@ -278,16 +278,13 @@
     isAdmin = false;
 
     if(session?.user){
-      const {data:profile,error} = await supabaseClient
-        .from('profiles')
-        .select('is_admin')
-        .eq('id',session.user.id)
-        .maybeSingle();
+  const {data:adminStatus,error} = await supabaseClient
+    .rpc('is_current_user_admin');
 
-      if(!error && profile?.is_admin === true) isAdmin = true;
-    }
-    updateAuthUI();
+  if(!error && adminStatus === true) {
+    isAdmin = true;
   }
+}
 
   function updateAuthUI(){
     const box = document.getElementById('authBox');
